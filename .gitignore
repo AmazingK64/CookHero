@@ -1,23 +1,29 @@
-# virtual environment
-venv/
-env/
+# Virtual Environment
 .venv/
-__pycache__/
-*.pyc
-# IDE files
-.vscode/
-.idea/
-*.iml
-# OS files
-.DS_Store
-Thumbs.db
-# Logs
-logs/
-*.log
-# Temporary files
-tmp/
-temp/
-*.tmp
+venv/
+*.venv
 
-# data
-data/HowToCook/
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local data and indexes
+/data/child_chunks.jsonl
+/data/parent_documents.jsonl
+/vector_index/
+/deployments/volumes/
+/cookhero.db
+
+# Secrets
+.env
