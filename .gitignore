@@ -19,8 +19,7 @@ dist/
 *.egg-info/
 
 # Local data and indexes
-/data/child_chunks.jsonl
-/data/parent_documents.jsonl
+/data/documents/
 /data/HowToCook/
 /vector_index/
 /deployments/volumes/
@@ -28,3 +27,4 @@ dist/
 
 # Secrets
 .env
+GEMINI.md
