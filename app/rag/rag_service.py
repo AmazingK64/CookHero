@@ -2,8 +2,6 @@
 import logging
 from typing import Dict, Any
 
-from sklearn import base
-
 from app.rag.config import DefaultRAGConfig
 from app.rag.data_preparation import DataPreparationModule
 from app.rag.index_construction import IndexConstructionModule
@@ -61,8 +59,8 @@ class RAGService:
         # Load documents and create chunks
         self.data_prep_module.load_and_process_documents()
         
-        # Build or load the vector index
-        self.index_module.build_or_load_index(
+        # Build or connect to the vector index
+        self.index_module.build_or_connect_index(
             chunks=self.data_prep_module.child_chunks
         )
         

@@ -101,7 +101,8 @@ class DataPreparationModule:
 
     def _create_child_chunks(self):
         """
-        Splits parent documents into smaller 'child' chunks based on Markdown headers.
+        Splits parent documents into smaller 'child' chunks based on Markdown headers
+        and ensures consistent metadata keys across all chunks.
         """
         if not self.parent_documents:
             raise ValueError("Parent documents must be loaded before creating chunks.")
@@ -112,10 +113,11 @@ class DataPreparationModule:
         )
 
         all_chunks = []
+        header_keys = [h[1] for h in self.headers_to_split_on]
+
         for doc in self.parent_documents:
             md_chunks = markdown_splitter.split_text(doc.page_content)
             
-            # Link each chunk to its parent
             for i, chunk in enumerate(md_chunks):
                 # Inherit metadata from parent
                 chunk.metadata.update(doc.metadata)
@@ -124,8 +126,11 @@ class DataPreparationModule:
                     "doc_type": "child",
                     "chunk_index": i
                 })
-                # Remove parent-only metadata if not needed on child
-                # (keeping it for now as it's useful)
+                
+                # Ensure all possible header keys are present to prevent schema mismatch
+                for key in header_keys:
+                    if key not in chunk.metadata:
+                        chunk.metadata[key] = "" # Use empty string for missing headers
                 
             all_chunks.extend(md_chunks)
         

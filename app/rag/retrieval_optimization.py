@@ -3,7 +3,7 @@ import hashlib
 import logging
 from typing import List, Dict, Any
 
-from langchain_community.vectorstores import FAISS
+from langchain_milvus import Milvus
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 
@@ -13,7 +13,7 @@ class RetrievalOptimizationModule:
     """
     Handles advanced retrieval strategies like hybrid search and re-ranking.
     """
-    def __init__(self, vectorstore: FAISS, child_chunks: List[Document]):
+    def __init__(self, vectorstore: Milvus, child_chunks: List[Document]):
         """
         Initializes the retrieval optimization module.
         Args:

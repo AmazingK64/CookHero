@@ -8,11 +8,15 @@ class RAGConfig(BaseSettings):
     """
     # --- Path Settings ---
     DATA_PATH: str = "data/HowToCook"
-    INDEX_SAVE_PATH: str = "./vector_index"
+    
+    # --- Milvus Settings ---
+    MILVUS_HOST: str = "localhost"
+    MILVUS_PORT: int = 19530
+    MILVUS_COLLECTION_NAME: str = "cook_hero_recipes"
 
     # --- Embedding Settings ---
     # Mode can be 'local' or 'remote'
-    EMBEDDING_MODE: Literal['local', 'remote'] = 'local'
+    EMBEDDING_MODE: Literal['local', 'remote'] = 'remote'
     # Local model for embedding text.
     LOCAL_EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
     # Remote API endpoint for embeddings
@@ -21,6 +25,8 @@ class RAGConfig(BaseSettings):
     EMBEDDING_API_KEY: str = "None"
     # Remote model name for embeddings
     REMOTE_EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"
+    # Batch size for remote embedding requests
+    EMBEDDING_BATCH_SIZE: int = 64
     
     # --- LLM Settings ---
     LLM_MODEL: str = "gpt-4o-mini"
@@ -41,9 +47,9 @@ class RAGConfig(BaseSettings):
     # --- Chunking Settings ---
     # Using a simple list here as pydantic_settings has issues with dataclasses.field
     HEADERS_TO_SPLIT_ON: list = [
-        ("#", "主标题"),
-        ("##", "二级标题"),
-        ("###", "三级标题")
+        ("#", "header_1"),
+        ("##", "header_2"),
+        ("###", "header_3")
     ]
 
     class Config:

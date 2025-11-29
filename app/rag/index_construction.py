@@ -1,10 +1,7 @@
 import logging
-from pathlib import Path
 from typing import List
-
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import FAISS
+from pymilvus import utility, connections
+from langchain_milvus import Milvus
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
@@ -14,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class IndexConstructionModule:
     """
-    Handles the creation and persistence of the vector index.
+    Handles the creation and connection to the Milvus vector store using LangChain's abstractions.
     """
     def __init__(self, config: RAGConfig):
         """
@@ -23,13 +20,13 @@ class IndexConstructionModule:
             config: The RAG configuration object.
         """
         self.config = config
-        self.index_save_path = Path(config.INDEX_SAVE_PATH)
         self.embeddings: Embeddings = self._init_embeddings()
-        self.vectorstore: FAISS | None = None
+        self.vectorstore: Milvus | None = None
 
     def _init_embeddings(self) -> Embeddings:
         """Initializes the embedding model based on the configuration."""
         if self.config.EMBEDDING_MODE == 'local':
+            from langchain_huggingface import HuggingFaceEmbeddings
             logger.info(f"Initializing local embedding model: {self.config.LOCAL_EMBEDDING_MODEL}")
             return HuggingFaceEmbeddings(
                 model_name=self.config.LOCAL_EMBEDDING_MODEL,
@@ -37,73 +34,70 @@ class IndexConstructionModule:
                 encode_kwargs={'normalize_embeddings': True}
             )
         elif self.config.EMBEDDING_MODE == 'remote':
+            from langchain_openai import OpenAIEmbeddings
             logger.info(f"Initializing remote embedding model: {self.config.REMOTE_EMBEDDING_MODEL}")
-            if not self.config.EMBEDDING_API_KEY:
+            if not self.config.EMBEDDING_API_KEY or self.config.EMBEDDING_API_KEY == "None":
                 raise ValueError("EMBEDDING_API_KEY must be set in config for remote embedding mode.")
             
-            # Use OpenAIEmbeddings client
             return OpenAIEmbeddings(
                 model=self.config.REMOTE_EMBEDDING_MODEL,
                 api_key=self.config.EMBEDDING_API_KEY, # type: ignore
                 base_url=self.config.EMBEDDING_API_URL,
-                # Depending on the API, you might need to add other headers or params
+                chunk_size=self.config.EMBEDDING_BATCH_SIZE,
             )
         else:
             raise ValueError(f"Invalid EMBEDDING_MODE: {self.config.EMBEDDING_MODE}")
 
-    def build_or_load_index(self, chunks: List[Document]):
+    def build_or_connect_index(self, chunks: List[Document], force_rebuild: bool = False):
         """
-        Loads the index from disk if it exists, otherwise builds a new one from documents.
-        Args:
-            chunks: A list of Document chunks to be indexed if no existing index is found.
+        Connects to the Milvus collection, creating it if it doesn't exist.
+        Relies on LangChain's Milvus class to handle schema creation.
         """
-        if self.index_save_path.exists():
-            logger.info(f"Loading existing FAISS index from: {self.index_save_path}")
-            try:
-                self.vectorstore = FAISS.load_local(
-                    folder_path=str(self.index_save_path),
-                    embeddings=self.embeddings,
-                    allow_dangerous_deserialization=True
-                )
-                logger.info("Successfully loaded FAISS index.")
-            except Exception as e:
-                logger.warning(f"Failed to load index: {e}. Rebuilding index from scratch.")
-                self._build_new_index(chunks)
-        else:
-            logger.info("No existing index found. Building a new index from scratch.")
-            self._build_new_index(chunks)
+        collection_name = self.config.MILVUS_COLLECTION_NAME
+        connection_args = {"host": self.config.MILVUS_HOST, "port": self.config.MILVUS_PORT}
+        alias = "default"
+
+        logger.info(f"Managing Milvus connection at {connection_args['host']}:{connection_args['port']}")
+        
+        try:
+            connections.connect(alias=alias, **connection_args)
+            if force_rebuild and utility.has_collection(collection_name, using=alias):
+                logger.warning(f"Dropping existing Milvus collection: {collection_name}")
+                _=utility.drop_collection(collection_name, using=alias)
             
-    def _build_new_index(self, chunks: List[Document]):
-        """
-        Builds a new FAISS index from the provided document chunks.
-        Args:
-            chunks: A list of Document chunks to be indexed.
-        """
-        if not chunks:
-            raise ValueError("Cannot build index from an empty list of chunks.")
-        
-        logger.info(f"Building FAISS index from {len(chunks)} chunks...")
-        self.vectorstore = FAISS.from_documents(
-            documents=chunks,
-            embedding=self.embeddings
-        )
-        logger.info("FAISS index built successfully.")
-        
-        self._save_index()
+            collection_exists = utility.has_collection(collection_name, using=alias)
+        finally:
+            if connections.has_connection(alias):
+                connections.disconnect(alias)
+                logger.info(f"Disconnected from Milvus alias '{alias}' used for pre-flight checks.")
 
-    def _save_index(self):
-        """Saves the FAISS index to the configured path."""
-        if not self.vectorstore:
-            raise ValueError("Vectorstore is not initialized. Cannot save index.")
-        
-        self.index_save_path.mkdir(parents=True, exist_ok=True)
-        self.vectorstore.save_local(str(self.index_save_path))
-        logger.info(f"FAISS index saved to: {self.index_save_path}")
+        if not collection_exists:
+            logger.info(f"Milvus collection '{collection_name}' not found. Creating via LangChain...")
+            if not chunks:
+                raise ValueError("Cannot build a new collection from an empty list of chunks.")
 
-    def get_vectorstore(self) -> FAISS:
-        """
-        Returns the initialized FAISS vectorstore.
-        """
+            self.vectorstore = Milvus.from_documents(
+                documents=chunks,
+                embedding=self.embeddings,
+                collection_name=collection_name,
+                connection_args=connection_args,
+                # Explicitly define field names for LangChain to use
+                text_field="text",
+                vector_field="embedding",
+            )
+            logger.info(f"Successfully created and populated Milvus collection: {collection_name}")
+        else:
+            logger.info(f"Connecting to existing Milvus collection: {collection_name}")
+            self.vectorstore = Milvus(
+                embedding_function=self.embeddings,
+                collection_name=collection_name,
+                connection_args=connection_args,
+                text_field="text",
+                vector_field="embedding",
+            )
+            logger.info(f"Successfully connected to Milvus collection: {collection_name}")
+
+    def get_vectorstore(self) -> Milvus:
         if not self.vectorstore:
-            raise ValueError("Vectorstore has not been built or loaded.")
+            raise ValueError("Vectorstore has not been built or connected.")
         return self.vectorstore
