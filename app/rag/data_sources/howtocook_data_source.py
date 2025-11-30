@@ -1,10 +1,10 @@
 # app/rag/data_sources/howtocook_data_source.py
 import logging
-import hashlib
+from math import log
+import uuid
 from pathlib import Path
-from typing import List
+from typing import List, Tuple, Dict, Any
 
-from anyio import sleep_forever
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_core.documents import Document
 
@@ -36,7 +36,7 @@ class HowToCookDataSource(BaseDataSource):
         logger.info(f"Loading and processing data from HowToCook source: {self.data_path}")
         self.parent_documents = self._load_parent_documents()
         # Create a mapping of parent_id to parent_document for quick lookup
-        self.parent_doc_map = {doc.metadata["parent_id"]: doc for doc in self.parent_documents}
+        self.parent_doc_map = {doc.id: doc for doc in self.parent_documents}
         self.chunks = self._create_child_chunks(self.parent_documents)
         
         self._save_debug_files(self.parent_documents, self.chunks)
@@ -53,9 +53,12 @@ class HowToCookDataSource(BaseDataSource):
         if not self.parent_documents:
             logger.warning("Parent documents not loaded. Loading them now for post-processing.")
             self.parent_documents = self._load_parent_documents()
-        
-        logger.info(f"retrieved_chunks metadata: {[doc.metadata for doc in retrieved_chunks]}")
+            self.parent_doc_map = {doc.id: doc for doc in self.parent_documents}
 
+        logger.info("Original retrieved chunks metadata: "
+                    f"{[chunk.metadata for chunk in retrieved_chunks]}")
+        
+        # Extract unique parent IDs from the retrieved chunks
         parent_ids = set()
         for chunk in retrieved_chunks:
             parent_id = chunk.metadata.get("parent_id")
@@ -67,7 +70,8 @@ class HowToCookDataSource(BaseDataSource):
         
         logger.info(f"Retrieved {len(retrieved_chunks)} chunks, which correspond to "
                     f"{len(final_docs)} unique parent documents.")
-        logger.info(f"Final documents metadata: {[doc.metadata for doc in final_docs]}")
+        logger.info("Final documents metadata: "
+                    f"{[doc.metadata for doc in final_docs]}")
         return final_docs
 
     def _load_parent_documents(self) -> List[Document]:
@@ -77,11 +81,12 @@ class HowToCookDataSource(BaseDataSource):
             try:
                 with open(md_file, 'r', encoding='utf-8') as f:
                     content = f.read()
-                relative_path = md_file.relative_to(self.data_path.parent).as_posix()
-                parent_id = hashlib.md5(relative_path.encode("utf-8")).hexdigest()
+                
+                doc_id = str(uuid.uuid4())
                 doc = Document(
+                    id=doc_id,
                     page_content=content,
-                    metadata={"source": str(md_file), "parent_id": parent_id}
+                    metadata={"source": str(md_file), "parent_id": None}
                 )
                 self._enhance_metadata(doc)
                 documents.append(doc)
@@ -121,8 +126,12 @@ class HowToCookDataSource(BaseDataSource):
         for doc in parent_documents:
             md_chunks = markdown_splitter.split_text(doc.page_content)
             for i, chunk in enumerate(md_chunks):
+                chunk.id = str(uuid.uuid4())
                 chunk.metadata.update(doc.metadata)
-                chunk.metadata.update({"doc_type": "child", "chunk_index": i})
+                chunk.metadata.update({
+                    "parent_id": doc.id,
+                    "chunk_index": i
+                    })
                 for key in header_keys:
                     if key not in chunk.metadata:
                         chunk.metadata[key] = ""
