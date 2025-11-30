@@ -1,144 +1,197 @@
 # app/rag/retrieval_optimization.py
-import hashlib
 import logging
-from math import log
-from typing import List, Dict, Any
-import jieba
+from typing import List, Dict, Any, Tuple, Optional, Literal
 
 from langchain_milvus import Milvus
-from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
-def tokenizer(text: str) -> List[str]:
-    s = text.split()
-    tokens = []
-    for token in s:
-        tokens.extend(jieba.lcut(token))
-    return tokens
-
 class RetrievalOptimizationModule:
     """
-    Handles advanced retrieval strategies like hybrid search and re-ranking.
+    Handles advanced retrieval strategies using Milvus built-in hybrid search.
+    Combines dense vector search with sparse BM25 search using Milvus native capabilities.
+    Supports dynamic ranker configuration and score-based filtering.
     """
-    def __init__(self, vectorstore: Milvus, child_chunks: List[Document]):
+    def __init__(
+        self, 
+        vectorstore: Milvus, 
+        child_chunks: List[Document],
+        score_threshold: float = 0.0,
+        default_ranker_type: str = "rrf",
+        default_ranker_weights: List[float] = [0.5, 0.5]
+    ):
         """
         Initializes the retrieval optimization module.
         Args:
-            vectorstore: The FAISS vectorstore containing the document chunks.
-            child_chunks: The list of all child document chunks, used for BM25.
+            vectorstore: The Milvus vectorstore with BM25 built-in function enabled.
+            child_chunks: The list of all child document chunks (kept for compatibility).
+            score_threshold: Minimum score threshold for filtering low-quality results.
+            default_ranker_type: Default ranker type ("rrf" or "weighted").
+            default_ranker_weights: Default weights for [dense, sparse] when using weighted ranker.
         """
-        if not vectorstore or not child_chunks:
-            raise ValueError("Vectorstore and child_chunks must be provided.")
+        if not vectorstore:
+            raise ValueError("Vectorstore must be provided.")
             
         self.vectorstore = vectorstore
-        self.child_chunks = child_chunks
-        self._setup_retrievers()
-
-    def _setup_retrievers(self):
-        """Sets up the individual retrievers (vector and BM25)."""
-        logger.info("Setting up retrievers...")
-        # Vector retriever for semantic search
-        self.vector_retriever = self.vectorstore.as_retriever(search_kwargs={"k": 10})
+        self.child_chunks = child_chunks  # Keep for potential future use
+        self.score_threshold = score_threshold
+        self.default_ranker_type = default_ranker_type
+        self.default_ranker_weights = default_ranker_weights
         
-        # BM25 retriever for keyword-based search
-        self.bm25_retriever = BM25Retriever.from_documents(
-            self.child_chunks,
-            preprocess_func=tokenizer,
-            k=10
-        )
-        logger.info("Vector and BM25 retrievers are ready.")
+        logger.info(f"Retrieval optimization module initialized with Milvus hybrid search")
+        logger.info(f"Score threshold: {score_threshold}, Default ranker: {default_ranker_type}, Weights: {default_ranker_weights}")
         
-    def hybrid_search(self, query: str, top_k: int) -> List[Document]:
+    def hybrid_search(
+        self, 
+        query: str, 
+        top_k: int,
+        ranker_type: Optional[str] = None,
+        ranker_weights: Optional[List[float]] = None,
+        score_threshold: Optional[float] = None
+    ) -> Tuple[List[Document], List[float]]:
         """
-        Performs a hybrid search by combining vector and BM25 results with RRF.
+        Performs hybrid search using Milvus built-in BM25 and dense vector search.
+        Supports dynamic ranker configuration and score-based filtering.
+        
         Args:
             query: The user's search query.
-            top_k: The final number of documents to return.
+            top_k: The number of documents to retrieve (before filtering).
+            ranker_type: Ranker type ("rrf" or "weighted"). Uses default if None.
+            ranker_weights: Weights for [dense, sparse] when using weighted ranker. Uses default if None.
+            score_threshold: Minimum score threshold. Uses instance default if None.
+            
         Returns:
-            A list of re-ranked documents.
+            A tuple of (documents, scores) where both lists have the same length.
         """
-        # Get results from both retrievers
-        vector_docs = self.vector_retriever.invoke(query)
-        bm25_docs = self.bm25_retriever.invoke(query)
-
-        logger.info(f"length of vector_docs: {len(vector_docs)}")
-        logger.info(f"length of bm25_docs: {len(bm25_docs)}")
-
-        for doc in vector_docs:
-            logger.info("=" * 40)
-            logger.info(f"vector_docs doc ID: {doc.id}, Metadata: {doc.metadata}")
-        for doc in bm25_docs:
-            logger.info("=" * 40)
-            logger.info(f"bm25_docs doc ID: {doc.id}, Metadata: {doc.metadata}")
-
-        # Re-rank using Reciprocal Rank Fusion (RRF)
-        reranked_docs = self._reciprocal_rank_fusion([vector_docs, bm25_docs])
+        # Use defaults if not specified
+        ranker_type = ranker_type or self.default_ranker_type
+        ranker_weights = ranker_weights or self.default_ranker_weights
+        score_threshold = score_threshold if score_threshold is not None else self.score_threshold
         
-        return reranked_docs[:top_k]
+        logger.info(f"Performing Milvus hybrid search for query: '{query}'")
+        logger.info(f"Parameters: top_k={top_k}, ranker_type={ranker_type}, weights={ranker_weights}, threshold={score_threshold}")
+        
+        # Prepare ranker parameters
+        ranker_params = {}
+        if ranker_type == "weighted":
+            ranker_params = {"weights": ranker_weights}
+        
+        # Milvus hybrid search with configurable ranker
+        results = self.vectorstore.similarity_search_with_score(
+            query=query,
+            k=top_k,
+            ranker_type=ranker_type,
+            ranker_params=ranker_params if ranker_params else None
+        )
+        
+        # Extract documents and scores
+        docs = [doc for doc, score in results]
+        scores = [score for doc, score in results]
+        
+        logger.info(f"Retrieved {len(docs)} documents from hybrid search (before filtering)")
+        
+        # Log each document with its score
+        for i, (doc, score) in enumerate(zip(docs, scores)):
+            logger.info("=" * 60)
+            logger.info(f"Rank #{i+1} | Score: {score:.4f} | Doc ID: {doc.id}")
+            logger.info(f"Metadata: {doc.metadata}")
+            logger.info(f"Content preview: {doc.page_content[:100]}...")
+        
+        # Apply score threshold filtering
+        if score_threshold > 0:
+            filtered_results = [(doc, score) for doc, score in zip(docs, scores) if score >= score_threshold]
+            filtered_docs = [doc for doc, score in filtered_results]
+            filtered_scores = [score for doc, score in filtered_results]
+            
+            logger.info("=" * 60)
+            logger.info(f"Score filtering: {len(docs)} → {len(filtered_docs)} documents (threshold: {score_threshold})")
+            
+            if len(filtered_docs) < len(docs):
+                logger.warning(f"Filtered out {len(docs) - len(filtered_docs)} low-score documents")
+                for doc, score in zip(docs, scores):
+                    if score < score_threshold:
+                        logger.warning(f"Filtered: Score {score:.4f} < {score_threshold} | Doc ID: {doc.id}")
+            
+            return filtered_docs, filtered_scores
+        
+        return docs, scores
 
-    def metadata_filtered_search(self, query: str, filters: Dict[str, Any], top_k: int) -> List[Document]:
+    def metadata_filtered_search(
+        self, 
+        query: str, 
+        filters: Dict[str, Any], 
+        top_k: int,
+        ranker_type: Optional[str] = None,
+        ranker_weights: Optional[List[float]] = None
+    ) -> Tuple[List[Document], List[float]]:
         """
-        Performs a search and then applies metadata filters to the results.
+        Performs a hybrid search and then applies metadata filters to the results.
         Note: This is a post-filtering approach. For large-scale systems, pre-filtering
-        or using a vector store that supports metadata filtering natively is more efficient.
+        using Milvus native filtering is more efficient.
         
         Args:
             query: The user's search query.
             filters: A dictionary of metadata key-value pairs to filter on.
             top_k: The final number of documents to return.
+            ranker_type: Ranker type ("rrf" or "weighted"). Uses default if None.
+            ranker_weights: Weights for [dense, sparse] when using weighted ranker.
             
         Returns:
-            A list of filtered and re-ranked documents.
+            A tuple of (documents, scores) matching the filters.
         """
         # Get a larger pool of candidates with hybrid search
-        initial_candidates = self.hybrid_search(query, top_k * 5)
+        initial_docs, initial_scores = self.hybrid_search(
+            query, 
+            top_k * 5,
+            ranker_type=ranker_type,
+            ranker_weights=ranker_weights
+        )
         
         # Apply filters
-        filtered_docs = []
-        for doc in initial_candidates:
+        filtered_results = []
+        for doc, score in zip(initial_docs, initial_scores):
             is_match = all(
                 doc.metadata.get(key) == value for key, value in filters.items()
             )
             if is_match:
-                filtered_docs.append(doc)
+                filtered_results.append((doc, score))
         
-        logger.info(f"Found {len(filtered_docs)} documents matching filters out of "
-                    f"{len(initial_candidates)} initial candidates.")
+        logger.info(f"Found {len(filtered_results)} documents matching filters out of "
+                    f"{len(initial_docs)} initial candidates.")
         
-        return filtered_docs[:top_k]
-
-    def _reciprocal_rank_fusion(self, result_sets: List[List[Document]], k: int = 60) -> List[Document]:
+        # Return top_k results
+        final_results = filtered_results[:top_k]
+        final_docs = [doc for doc, score in final_results]
+        final_scores = [score for doc, score in final_results]
+        
+        return final_docs, final_scores
+    
+    def intelligent_ranker_selection(self, query: str) -> Tuple[str, List[float]]:
         """
-        Performs Reciprocal Rank Fusion on a list of ranked document lists.
+        Intelligently selects ranker type and weights based on query characteristics.
+        This can be extended with more sophisticated logic or ML models.
+        
         Args:
-            result_sets: A list where each element is a ranked list of Documents.
-            k: A constant used in the RRF formula to smooth scores.
+            query: The user's search query.
+            
         Returns:
-            A single, re-ranked list of unique documents.
+            A tuple of (ranker_type, weights).
         """
-        # Dictionary to store the RRF scores for each document
-        fused_scores = {}
-        # Dictionary to store the actual Document objects, keyed by content hash
-        doc_store = {}
-
-        for docs in result_sets:
-            for rank, doc in enumerate(docs):
-                doc_id = doc.id
-                doc_store[doc_id] = doc
-                
-                # RRF formula: 1 / (k + rank)
-                score = 1.0 / (k + rank + 1)
-                
-                # Add the score to the document's fused score
-                if doc_id not in fused_scores:
-                    fused_scores[doc_id] = 0
-                fused_scores[doc_id] += score
-
-        # Sort documents based on their final fused scores in descending order
-        reranked_results = sorted(fused_scores.items(), key=lambda item: item[1], reverse=True)
-
-        # Map the sorted doc_ids back to Document objects
-        final_docs = [doc_store[doc_id] for doc_id, _ in reranked_results]
-        return final_docs
+        query_lower = query.lower()
+        
+        # Keyword-heavy queries (with specific terms) → favor BM25
+        keyword_indicators = ["怎么做", "如何", "步骤", "方法", "做法", "recipe", "how to", "步骤"]
+        if any(indicator in query_lower for indicator in keyword_indicators):
+            logger.info(f"Query contains keyword indicators, using weighted ranker with BM25 bias")
+            return "weighted", [0.3, 0.7]  # Favor sparse/BM25
+        
+        # Semantic/conceptual queries → favor dense embeddings
+        semantic_indicators = ["推荐", "类似", "什么菜", "适合", "建议", "recommend", "similar", "suggest"]
+        if any(indicator in query_lower for indicator in semantic_indicators):
+            logger.info(f"Query contains semantic indicators, using weighted ranker with dense bias")
+            return "weighted", [0.7, 0.3]  # Favor dense/semantic
+        
+        # Balanced queries → use RRF
+        logger.info(f"Balanced query, using RRF ranker")
+        return "rrf", [0.5, 0.5]
