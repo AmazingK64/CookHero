@@ -3,12 +3,20 @@ import hashlib
 import logging
 from math import log
 from typing import List, Dict, Any
+import jieba
 
 from langchain_milvus import Milvus
 from langchain_community.retrievers import BM25Retriever
 from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
+
+def tokenizer(text: str) -> List[str]:
+    s = text.split()
+    tokens = []
+    for token in s:
+        tokens.extend(jieba.lcut(token))
+    return tokens
 
 class RetrievalOptimizationModule:
     """
@@ -37,6 +45,7 @@ class RetrievalOptimizationModule:
         # BM25 retriever for keyword-based search
         self.bm25_retriever = BM25Retriever.from_documents(
             self.child_chunks,
+            preprocess_func=tokenizer,
             k=10
         )
         logger.info("Vector and BM25 retrievers are ready.")
