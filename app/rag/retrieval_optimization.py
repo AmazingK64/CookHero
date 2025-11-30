@@ -59,10 +59,10 @@ class RetrievalOptimizationModule:
 
         for doc in vector_docs:
             logger.info("=" * 20)
-            logger.info(f"vector_docs doc ID: {doc.id}, Content snippet: {doc.page_content[:100]}")
+            logger.info(f"vector_docs doc ID: {doc.metadata.get("parent_id")}, Metadata: {doc.metadata}")
         for doc in bm25_docs:
             logger.info("=" * 20)
-            logger.info(f"bm25_docs doc ID: {doc.id}, Content snippet: {doc.page_content[:100]}")
+            logger.info(f"bm25_docs doc ID: {doc.metadata.get("parent_id")}, Metadata: {doc.metadata}")
 
         # Re-rank using Reciprocal Rank Fusion (RRF)
         reranked_docs = self._reciprocal_rank_fusion([vector_docs, bm25_docs])

@@ -1,16 +1,11 @@
 # scripts/test_rag.py
 import logging
-import os, sys
-from app.rag.rag_service import RAGService
-from dotenv import load_dotenv
-
 # --- Setup Logging ---
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- Load environment variables ---
-load_dotenv()
+from app.rag.rag_service import rag_service_instance
 
 def test_rag_service():
     """
@@ -18,39 +13,24 @@ def test_rag_service():
     """
     logger.info("--- Starting RAG Service Test ---")
 
-    # Instantiate the RAGService.
-    # This will automatically trigger the knowledge base loading and module initialization.
-    try:
-        rag_service = RAGService()
-    except Exception as e:
-        logger.error(f"Failed to initialize RAGService: {e}")
-        return
+    # The RAGService is now a singleton that initializes itself on first import.
+    # The config loader handles the API key check.
 
     sample_questions = [
-        # "你好",
-        "怎么制作一个好吃的宫保鸡丁，并且可以搭配哪些辅菜？",
-        # "宫保鸡丁需要什么食材？",
-        # "如何腌制小黄瓜？",
-        # "我想学习做菜，厨房里需要准备哪些基本工具和材料？"
+        "给我推荐几个素菜.",
+        "皮蛋瘦肉粥怎么做？",
     ]
 
     for i, question in enumerate(sample_questions):
         logger.info(f"\n--- Question {i+1}: {question} ---")
         try:
-            # Test streaming response
             logger.info("Streaming response:")
-            response_chunks = rag_service.ask(question, stream=True)
+            response_chunks = rag_service_instance.ask(question, stream=True)
             full_response = ""
             for chunk in response_chunks:
                 print(chunk, end="", flush=True)
                 full_response += chunk
-            print("\n") # Newline after streaming
-            # logger.info(f"Full streaming response received: {full_response[:200]}...") # Log partial response
-            
-            # Test non-streaming response
-            # logger.info("Non-streaming response:")
-            # non_stream_response = rag_service.ask(question, stream=False)
-            # print(non_stream_response)
+            print("\n")
             
         except Exception as e:
             logger.error(f"Error asking question '{question}': {e}", exc_info=True)

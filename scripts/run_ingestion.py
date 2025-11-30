@@ -1,10 +1,8 @@
 # scripts/run_ingestion.py
 import logging
-import os
 
-from app.rag.config import DefaultRAGConfig
+from app.rag.config_loader import DefaultRAGConfig
 from app.rag.data_sources.howtocook_data_source import HowToCookDataSource
-from app.rag.data_preparation import DataPreparationModule
 from app.rag.embeddings.embedding_factory import get_embedding_model
 from app.rag.vector_stores.vector_store_factory import get_vector_store
 
@@ -23,13 +21,12 @@ def main():
     config = DefaultRAGConfig
     
     # 1. Data Source and Preparation
-    logger.info("Preparing data...")
-    data_source = HowToCookDataSource(data_path=config.DATA_PATH)
-    data_prep_module = DataPreparationModule(
-        data_source=data_source,
-        headers_to_split_on=config.HEADERS_TO_SPLIT_ON
+    logger.info("Preparing data from source...")
+    data_source = HowToCookDataSource(
+        data_path=config.paths.data_path,
+        headers_to_split_on=config.data_source.howtocook.headers_to_split_on
     )
-    data_prep_module.run()
+    child_chunks = data_source.get_chunks()
     logger.info("Data preparation complete.")
 
     # 2. Embedding Model
@@ -41,12 +38,12 @@ def main():
     _ = get_vector_store(
         config=config,
         embeddings=embeddings,
-        chunks=data_prep_module.child_chunks,
+        chunks=child_chunks,
         force_rebuild=True
     )
     
     logger.info("--- CookHero Data Ingestion Pipeline Finished ---")
-    logger.info(f"Milvus collection '{config.MILVUS_COLLECTION_NAME}' is ready.")
+    logger.info(f"Milvus collection '{config.vector_store.collection_name}' is ready.")
 
 if __name__ == "__main__":
     main()

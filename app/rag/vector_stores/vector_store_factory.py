@@ -29,8 +29,9 @@ def get_vector_store(
     Returns:
         An instance of the Milvus vector store.
     """
-    collection_name = config.MILVUS_COLLECTION_NAME
-    connection_args = {"host": config.MILVUS_HOST, "port": config.MILVUS_PORT}
+    vs_config = config.vector_store
+    collection_name = vs_config.collection_name
+    connection_args = {"host": vs_config.host, "port": vs_config.port}
     alias = "default"
 
     logger.info(f"Managing Milvus connection at {connection_args['host']}:{connection_args['port']}")
@@ -39,7 +40,7 @@ def get_vector_store(
         connections.connect(alias=alias, **connection_args)
         if force_rebuild and utility.has_collection(collection_name, using=alias):
             logger.warning(f"Dropping existing Milvus collection: {collection_name}")
-            _ = utility.drop_collection(collection_name, using=alias)
+            utility.drop_collection(collection_name, using=alias)
         
         collection_exists = utility.has_collection(collection_name, using=alias)
     finally:
