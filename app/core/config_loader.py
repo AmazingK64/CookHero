@@ -1,8 +1,8 @@
-# app/rag/config_loader.py
+# app/core/config_loader.py
 import yaml
 from pathlib import Path
 from dotenv import dotenv_values
-from app.rag.config import RAGConfig
+from app.core.rag_config import RAGConfig
 
 def load_config() -> RAGConfig:
     """

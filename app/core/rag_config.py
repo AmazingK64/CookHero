@@ -1,4 +1,4 @@
-# app/rag/config.py
+# app/core/rag_config.py
 from pydantic import BaseModel, Field
 from typing import List, Literal, Optional, Dict
 
@@ -30,7 +30,10 @@ class LLMConfig(BaseModel):
 
 class RetrievalConfig(BaseModel):
     top_k: int
-    rrf_k: int
+    rrf_k: int  # Deprecated: Milvus now handles RRF internally, kept for backward compatibility
+    score_threshold: float = 0.0  # Minimum score threshold for filtering low-quality results
+    ranker_type: Literal["rrf", "weighted"] = "rrf"  # Ranker type for hybrid search
+    ranker_weights: List[float] = [0.5, 0.5]  # Weights for [dense, sparse] when using weighted ranker
 
 class HowToCookConfig(BaseModel):
     headers_to_split_on: List[List[str]]
