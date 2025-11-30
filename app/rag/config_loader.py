@@ -1,0 +1,37 @@
+# app/rag/config_loader.py
+import yaml
+from pathlib import Path
+from dotenv import dotenv_values
+from app.rag.config import RAGConfig
+
+def load_config() -> RAGConfig:
+    """
+    Loads configuration from a YAML file and merges it with secrets from a .env file.
+    
+    Returns:
+        A validated RAGConfig object.
+    """
+    # Load base configuration from YAML file
+    config_path = Path("config.yml")
+    if not config_path.exists():
+        raise FileNotFoundError("config.yml not found in the project root.")
+        
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config_data = yaml.safe_load(f)
+
+    # Load sensitive data from .env file
+    secrets = dotenv_values(".env")
+
+    # Merge secrets into the config data
+    if "llm" in config_data and "LLM_API_KEY" in secrets:
+        config_data["llm"]["api_key"] = secrets["LLM_API_KEY"]
+    
+    if "embedding" in config_data and "EMBEDDING_API_KEY" in secrets:
+        config_data["embedding"]["api_key"] = secrets["EMBEDDING_API_KEY"]
+
+    # Validate and return the configuration using Pydantic models
+    return RAGConfig.parse_obj(config_data)
+
+# Create a single, globally accessible config instance
+# Any module can import this instance to get the configuration.
+DefaultRAGConfig = load_config()

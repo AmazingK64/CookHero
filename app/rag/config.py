@@ -1,61 +1,55 @@
 # app/rag/config.py
-from typing import Dict, Any, Optional, Literal
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, Field
+from typing import List, Literal, Optional, Dict
 
-class RAGConfig(BaseSettings):
+# --- Nested Configuration Models ---
+
+class PathsConfig(BaseModel):
+    data_path: str
+
+class VectorStoreConfig(BaseModel):
+    type: str
+    host: str
+    port: int
+    collection_name: str
+
+class EmbeddingConfig(BaseModel):
+    mode: Literal['local', 'remote']
+    local_model: str
+    remote_model: str
+    api_url: str
+    batch_size: int
+    api_key: Optional[str] = None  # Sensitive, will be loaded from .env
+
+class LLMConfig(BaseModel):
+    model_name: str
+    base_url: Optional[str] = None
+    temperature: float
+    max_tokens: int
+    api_key: Optional[str] = None  # Sensitive, will be loaded from .env
+
+class RetrievalConfig(BaseModel):
+    top_k: int
+    rrf_k: int
+
+class HowToCookConfig(BaseModel):
+    headers_to_split_on: List[List[str]]
+
+class DataSourceConfig(BaseModel):
+    howtocook: HowToCookConfig
+
+# --- Main Configuration Model ---
+
+class RAGConfig(BaseModel):
     """
-    Configuration for the RAG system, loaded from environment variables and .env file.
+    The main configuration model, composed of nested sub-models.
+    This structure mirrors the `config.yml` file.
     """
-    # --- Path Settings ---
-    DATA_PATH: str = "data/HowToCook"
-    
-    # --- Milvus Settings ---
-    MILVUS_HOST: str = "localhost"
-    MILVUS_PORT: int = 19530
-    MILVUS_COLLECTION_NAME: str = "cook_hero_recipes"
+    paths: PathsConfig
+    vector_store: VectorStoreConfig
+    embedding: EmbeddingConfig
+    llm: LLMConfig
+    retrieval: RetrievalConfig
+    data_source: DataSourceConfig
 
-    # --- Embedding Settings ---
-    # Mode can be 'local' or 'remote'
-    EMBEDDING_MODE: Literal['local', 'remote'] = 'remote'
-    # Local model for embedding text.
-    LOCAL_EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
-    # Remote API endpoint for embeddings
-    EMBEDDING_API_URL: str = "https://api.siliconflow.cn/v1"
-    # API Key for remote embedding service
-    EMBEDDING_API_KEY: str = "None"
-    # Remote model name for embeddings
-    REMOTE_EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"
-    # Batch size for remote embedding requests
-    EMBEDDING_BATCH_SIZE: int = 64
-    
-    # --- LLM Settings ---
-    LLM_MODEL: str = "gpt-4o-mini"
-    
-    # --- API Keys ---
-    # Will be automatically loaded from environment variables or .env file
-    LLM_API_KEY: str = "None"
-    LLM_BASE_URL: Optional[str] = None
-    
-    # --- Retrieval Settings ---
-    TOP_K: int = 3
-    RRF_K: int = 60
 
-    # --- Generation Settings ---
-    TEMPERATURE: float = 0.1
-    MAX_TOKENS: int = 4096
-
-    # --- Chunking Settings ---
-    # Using a simple list here as pydantic_settings has issues with dataclasses.field
-    HEADERS_TO_SPLIT_ON: list = [
-        ("#", "header_1"),
-        ("##", "header_2"),
-        ("###", "header_3")
-    ]
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
-
-# Create a default config instance for easy import.
-DefaultRAGConfig = RAGConfig()

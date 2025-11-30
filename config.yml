@@ -1,0 +1,48 @@
+# config.yml
+# Main configuration file for the CookHero RAG system.
+# Sensitive keys (like API keys) should be stored in a separate .env file.
+
+paths:
+  data_path: "data/HowToCook"
+
+vector_store:
+  # Type of vector store, for future extensibility (e.g., "chroma", "faiss")
+  type: "milvus"
+  host: "localhost"
+  port: 19530
+  collection_name: "cook_hero_recipes"
+
+embedding:
+  # Can be 'local' or 'remote'
+  mode: 'local'
+  
+  # Settings for local model
+  local_model: "BAAI/bge-small-zh-v1.5"
+  
+  # Settings for remote API
+  remote_model: "BAAI/bge-m3"
+  api_url: "https://api.siliconflow.cn/v1"
+  batch_size: 64
+
+llm:
+  # Model name for the language model
+  model_name: "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B"
+  # Optional base URL for self-hosted or proxy endpoints
+  base_url: "https://api.siliconflow.cn/v1"
+  # Generation parameters
+  temperature: 0.1
+  max_tokens: 4096
+
+retrieval:
+  # Number of documents to retrieve
+  top_k: 3
+  # Parameter for Reciprocal Rank Fusion
+  rrf_k: 60
+
+data_source:
+  # Settings specific to the HowToCook data source
+  howtocook:
+    headers_to_split_on:
+      - ["#", "header_1"]
+      - ["##", "header_2"]
+      - ["###", "header_3"]
