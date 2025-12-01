@@ -12,7 +12,7 @@ from app.rag.embeddings.embedding_factory import get_embedding_model
 from app.rag.vector_stores.vector_store_factory import get_vector_store
 from app.rag.retrieval_optimization import RetrievalOptimizationModule
 from app.rag.generation_integration import GenerationIntegrationModule
-from app.rag.rerankers.siliconflow_reranker import SiliconFlowReranker
+from app.rag.rerankers.base import BaseReranker
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class RAGService:
         
         self.data_sources: Dict[str, BaseDataSource] = {}
         self.retrieval_modules: Dict[str, RetrievalOptimizationModule] = {}
-        self.reranker: SiliconFlowReranker | None = None
+        self.reranker: BaseReranker | None = None
 
         self._load_knowledge_bases()
 
@@ -51,8 +51,10 @@ class RAGService:
         )
 
         if self.config.reranker.enabled:
-            logger.info("Reranker is enabled. Initializing SiliconFlowReranker.")
-            self.reranker = SiliconFlowReranker(self.config.reranker)
+            if self.config.reranker.type == "siliconflow":
+                from app.rag.rerankers.siliconflow_reranker import SiliconFlowReranker
+                self.reranker = SiliconFlowReranker(self.config.reranker)
+                logger.info("SiliconFlow Reranker initialized.")
 
         self._initialized = True
         logger.info("RAGService initialized successfully with multiple knowledge bases.")
