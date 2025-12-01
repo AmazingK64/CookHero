@@ -17,9 +17,16 @@ class HowToCookDataSource(BaseDataSource):
     Data source for loading and processing recipes from the HowToCook repository.
     """
     CATEGORY_MAPPING = {
-        'meat_dish': '荤菜', 'vegetable_dish': '素菜', 'soup': '汤品',
-        'dessert': '甜品', 'breakfast': '早餐', 'staple': '主食',
-        'aquatic': '水产', 'condiment': '调料', 'drink': '饮品'
+        'meat_dish': '荤菜',
+        'vegetable_dish': '素菜',
+        'soup': '汤品',
+        'dessert': '甜品',
+        'breakfast': '早餐',
+        'staple': '主食',
+        'aquatic': '水产',
+        'condiment': '调料',
+        'drink': '饮品',
+        'semi-finished': '半成品',
     }
 
     def __init__(self, data_path: str, headers_to_split_on: list):
