@@ -6,12 +6,13 @@ from langchain_milvus import Milvus, BM25BuiltInFunction
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
-from app.core.rag_config import RAGConfig
+from app.core.rag_config import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
 
 def get_vector_store(
-    config: RAGConfig,
+    vs_config: VectorStoreConfig,
+    collection_name: str,
     embeddings: Embeddings,
     chunks: List[Document],
     force_rebuild: bool = False
@@ -21,7 +22,8 @@ def get_vector_store(
     Connects to the Milvus collection, creating it if it doesn't exist.
     
     Args:
-        config: The RAG configuration object.
+        vs_config: The vector store configuration object.
+        collection_name: The specific name of the collection to connect to or create.
         embeddings: The embedding model instance to use.
         chunks: A list of Document chunks to be indexed if the collection is new.
         force_rebuild: If True, drops the existing collection and rebuilds it.
@@ -29,8 +31,6 @@ def get_vector_store(
     Returns:
         An instance of the Milvus vector store.
     """
-    vs_config = config.vector_store
-    collection_name = vs_config.collection_name
     connection_args = {"host": vs_config.host, "port": vs_config.port}
     alias = "default"
 
@@ -40,7 +40,7 @@ def get_vector_store(
         connections.connect(alias=alias, **connection_args)
         if force_rebuild and utility.has_collection(collection_name, using=alias):
             logger.warning(f"Dropping existing Milvus collection: {collection_name}")
-            _=utility.drop_collection(collection_name, using=alias)
+            _ = utility.drop_collection(collection_name, using=alias)
         
         collection_exists = utility.has_collection(collection_name, using=alias)
     finally:
