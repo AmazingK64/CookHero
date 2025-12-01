@@ -1,9 +1,13 @@
 # app/rag/rag_service.py
 import logging
+from pathlib import Path
+from typing import Dict
 
 from app.core.config_loader import DefaultRAGConfig
 from app.core.rag_config import RAGConfig
+from app.rag.data_sources.base import BaseDataSource
 from app.rag.data_sources.howtocook_data_source import HowToCookDataSource
+from app.rag.data_sources.tips_data_source import TipsDataSource
 from app.rag.embeddings.embedding_factory import get_embedding_model
 from app.rag.vector_stores.vector_store_factory import get_vector_store
 from app.rag.retrieval_optimization import RetrievalOptimizationModule
@@ -13,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 class RAGService:
     """
-    Orchestrates the entire RAG pipeline using a modular, factory-based architecture.
+    Orchestrates the entire RAG pipeline, supporting multiple data sources
+    and query routing.
     """
     _instance = None
 
@@ -25,96 +30,120 @@ class RAGService:
     def __init__(self, config: RAGConfig | None = None):
         if hasattr(self, '_initialized') and self._initialized:
             return
-            
+
         logger.info("Initializing RAGService for the first time...")
         self.config = config or DefaultRAGConfig
         
-        self._load_knowledge_base(force_rebuild=True)
-        
+        self.data_sources: Dict[str, BaseDataSource] = {}
+        self.retrieval_modules: Dict[str, RetrievalOptimizationModule] = {}
+
+        self._load_knowledge_bases()
+
         self.generation_module = GenerationIntegrationModule(
             model_name=self.config.llm.model_name,
             temperature=self.config.llm.temperature,
             max_tokens=self.config.llm.max_tokens,
-            api_key=self.config.llm.api_key, # type: ignore
+            api_key=self.config.llm.api_key,  # type: ignore
             base_url=self.config.llm.base_url
         )
-        
-        self._initialized = True
-        logger.info("RAGService initialized successfully.")
 
-    def _load_knowledge_base(self, force_rebuild=False):
+        self._initialized = True
+        logger.info("RAGService initialized successfully with multiple knowledge bases.")
+
+    def _load_knowledge_bases(self):
         """
-        Loads data, creates embeddings, builds the vector store, and sets up retrievers.
+        Loads data, creates embeddings, and sets up retrievers for all configured sources.
         """
-        logger.info("Loading knowledge base...")
-        
-        # 1. Data Source gets instantiated and loads/processes data internally
-        self.data_source = HowToCookDataSource(
-            data_path=self.config.paths.data_path,
-            headers_to_split_on=self.config.data_source.howtocook.headers_to_split_on
-        )
-        child_chunks = self.data_source.get_chunks()
-        
-        # 2. Embedding Model
+        logger.info("Loading all knowledge bases...")
         embeddings = get_embedding_model(self.config)
-        
-        # 3. Vector Store
-        vector_store = get_vector_store(
-            config=self.config,
-            embeddings=embeddings,
-            chunks=child_chunks,
-            force_rebuild=force_rebuild
-        )
-        
-        # 4. Retrieval Module with configuration
-        self.retrieval_module = RetrievalOptimizationModule(
-            vectorstore=vector_store,
-            child_chunks=child_chunks,
-            score_threshold=self.config.retrieval.score_threshold,
-            default_ranker_type=self.config.retrieval.ranker_type,
-            default_ranker_weights=self.config.retrieval.ranker_weights
-        )
-        logger.info("Knowledge base loaded and retrievers are ready.")
+
+        # Define the mapping from source name to class and config
+        source_definitions = {
+            "recipes": (HowToCookDataSource, self.config.data_source.howtocook),
+            "tips": (TipsDataSource, self.config.data_source.tips)
+        }
+
+        for name, (source_class, source_config) in source_definitions.items():
+            logger.info(f"--- Loading source: {name} ---")
+            
+            # 1. Instantiate Data Source
+            data_path = Path(self.config.paths.base_data_path) / source_config.path_suffix
+            data_source = source_class(
+                data_path=str(data_path),
+                headers_to_split_on=source_config.headers_to_split_on
+            )
+            child_chunks = data_source.get_chunks()
+            self.data_sources[name] = data_source
+            
+            # 2. Get Collection Name
+            collection_name = self.config.vector_store.collection_names.get(name)
+            if not collection_name:
+                logger.error(f"Collection for source '{name}' not in config. Skipping.")
+                continue
+
+            # 3. Get Vector Store instance
+            vector_store = get_vector_store(
+                vs_config=self.config.vector_store,
+                collection_name=collection_name,
+                embeddings=embeddings,
+                chunks=child_chunks,
+                force_rebuild=True
+            )
+            
+            # 4. Create and store Retrieval Module
+            retrieval_module = RetrievalOptimizationModule(
+                vectorstore=vector_store,
+                child_chunks=child_chunks,
+                score_threshold=self.config.retrieval.score_threshold,
+                default_ranker_type=self.config.retrieval.ranker_type,
+                default_ranker_weights=self.config.retrieval.ranker_weights
+            )
+            self.retrieval_modules[name] = retrieval_module
+            logger.info(f"--- Source '{name}' loaded successfully. ---")
 
     def ask(self, query: str, stream: bool = False, use_intelligent_ranker: bool = True):
         """
-        Main method to ask a question to the RAG system.
-        
-        Args:
-            query: User's question.
-            stream: Whether to stream the response.
-            use_intelligent_ranker: Whether to use intelligent ranker selection based on query.
+        Main method to ask a question. It routes, retrieves, and generates a response.
         """
-        if not all([self.retrieval_module, self.generation_module, self.data_source]):
+        if not all([self.retrieval_modules, self.generation_module, self.data_sources]):
             raise RuntimeError("RAG Service is not properly initialized.")
 
-        # 1. Route and Rewrite Query
+        # 1. Route Query to the correct data source
+        route = self.generation_module.route_query(query)
+        logger.info(f"Query routed to: {route}")
+
+        retrieval_module = self.retrieval_modules.get(route)
+        data_source = self.data_sources.get(route)
+
+        if not retrieval_module or not data_source:
+            raise RuntimeError(f"No retriever or data source found for route '{route}'")
+
+        # 2. Rewrite Query
         rewritten_query = self.generation_module.rewrite_query(query)
-        
-        # 2. Determine ranker type and weights based on query
-        ranker_type = None
-        ranker_weights = None
+
+        # 3. Determine ranker type and weights
+        ranker_type, ranker_weights = None, None
         if use_intelligent_ranker:
-            ranker_type, ranker_weights = self.retrieval_module.intelligent_ranker_selection(rewritten_query)
-        
-        # 3. Retrieve small chunks with scores
-        retrieved_chunks, scores = self.retrieval_module.hybrid_search(
-            rewritten_query, 
+            ranker_type, ranker_weights = retrieval_module.intelligent_ranker_selection(rewritten_query)
+
+        # 4. Retrieve small chunks with scores from the selected retriever
+        retrieved_chunks, _ = retrieval_module.hybrid_search(
+            rewritten_query,
             top_k=self.config.retrieval.top_k,
             ranker_type=ranker_type,
             ranker_weights=ranker_weights
         )
-        
-        # 4. Post-process retrieval to get large documents
-        final_docs = self.data_source.post_process_retrieval(retrieved_chunks)
-        
-        # 5. Generate response using the large documents
+
+        # 5. Post-process retrieval using the selected data source
+        final_docs = data_source.post_process_retrieval(retrieved_chunks)
+
+        # 6. Generate response
         response = self.generation_module.generate_response(
             query=rewritten_query,
             context_docs=final_docs,
             stream=stream
         )
-        
+
         return response
 
 # Instantiate the singleton service

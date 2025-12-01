@@ -49,19 +49,21 @@ class GenerationIntegrationModule:
         
     def route_query(self, query: str) -> str:
         """
-        Uses the LLM to classify the user's query into predefined categories.
+        Uses the LLM to classify the user's query to determine which data source to use.
         Args:
             query: The user's query.
         Returns:
-            A category string ('list', 'detail', 'general').
+            A category string: 'recipes' or 'tips'.
         """
         prompt = ChatPromptTemplate.from_template("""
-根据用户的问题，将其分类为以下三种类型之一：
-1. 'list' - 用户想要获取菜品列表或推荐，只需要菜名。例如：推荐几个素菜、有什么川菜。
-2. 'detail' - 用户想要具体的制作方法或详细信息。例如：宫保鸡丁怎么做、制作步骤、需要什么食材。
-3. 'general' - 其他一般性问题。例如：什么是川菜、制作技巧、营养价值。
+根据用户的问题，判断其意图是查询【菜谱信息】还是【烹饪技巧】。
 
-请只返回分类结果：'list'、'detail' 或 'general'.
+1. 'recipes' - 如果用户询问具体菜品的做法、步骤、食材，或寻求菜品推荐。
+   例如: "宫保鸡丁怎么做", "推荐几个简单的家常菜", "鱼香肉丝的配料是什么"。
+2. 'tips' - 如果用户询问通用的烹饪技巧、厨具使用、食材处理方法或背景知识。
+   例如: "如何保养铁锅", "切洋葱不流泪的方法", "什么是美拉德反应", "厨房安全须知"。
+
+请只返回分类结果：'recipes' 或 'tips'。
 
 用户问题: {query}
 分类结果:""")
@@ -69,12 +71,12 @@ class GenerationIntegrationModule:
         chain = prompt | self.llm | StrOutputParser()
         result = chain.invoke({"query": query}).strip().lower().replace("'", "")
         
-        if result in ['list', 'detail', 'general']:
-            logger.info(f"Query routed as: '{result}'")
+        if result in ['recipes', 'tips']:
+            logger.info(f"Query routed to data source: '{result}'")
             return result
         
-        logger.warning(f"Query router failed to classify, defaulting to 'general'. Raw output: {result}")
-        return 'general'
+        logger.warning(f"Query router failed to classify, defaulting to 'recipes'. Raw output: {result}")
+        return 'recipes'
 
     def rewrite_query(self, query: str) -> str:
         """
