@@ -81,6 +81,7 @@ class RetrievalOptimizationModule:
         results = self.vectorstore.similarity_search_with_score(
             query=query,
             k=top_k,
+            fetch_k=int(top_k * 3),
             ranker_type=ranker_type,
             ranker_params=ranker_params if ranker_params else None
         )
@@ -99,7 +100,7 @@ class RetrievalOptimizationModule:
             logger.info(f"Content preview: {doc.page_content[:100]}...")
         
         # Apply score threshold filtering
-        if score_threshold > 0:
+        if score_threshold > 0 and ranker_type == "weighted":
             filtered_results = [(doc, score) for doc, score in zip(docs, scores) if score >= score_threshold]
             filtered_docs = [doc for doc, score in filtered_results]
             filtered_scores = [score for doc, score in filtered_results]
@@ -184,14 +185,14 @@ class RetrievalOptimizationModule:
         keyword_indicators = ["怎么做", "如何", "步骤", "方法", "做法", "recipe", "how to", "步骤"]
         if any(indicator in query_lower for indicator in keyword_indicators):
             logger.info(f"Query contains keyword indicators, using weighted ranker with BM25 bias")
-            return "weighted", [0.3, 0.7]  # Favor sparse/BM25
+            return "weighted", [0.8, 0.2]  # Favor sparse/BM25
         
         # Semantic/conceptual queries → favor dense embeddings
         semantic_indicators = ["推荐", "类似", "什么菜", "适合", "建议", "recommend", "similar", "suggest"]
         if any(indicator in query_lower for indicator in semantic_indicators):
             logger.info(f"Query contains semantic indicators, using weighted ranker with dense bias")
-            return "weighted", [0.7, 0.3]  # Favor dense/semantic
+            return "weighted", [1, 0]  # Favor dense/semantic
         
         # Balanced queries → use RRF
         logger.info(f"Balanced query, using RRF ranker")
-        return "rrf", [0.5, 0.5]
+        return "rrf", [0.8, 0.2]

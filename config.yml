@@ -3,7 +3,7 @@
 # Sensitive keys (like API keys) should be stored in a separate .env file.
 
 paths:
-  data_path: "data/HowToCook"
+  data_path: "data/HowToCook/dishes"
 
 vector_store:
   # Type of vector store, for future extensibility (e.g., "chroma", "faiss")
@@ -35,13 +35,13 @@ llm:
 
 retrieval:
   # Number of documents to retrieve
-  top_k: 5
+  top_k: 9
   # RRF k parameter (deprecated, kept for backward compatibility)
   rrf_k: 60
   # Minimum score threshold for filtering low-quality results (0.0 = no filtering)
-  score_threshold: 0.1
+  score_threshold: 0.2
   # Ranker type: "rrf" (Reciprocal Rank Fusion) or "weighted" (weighted combination)
-  ranker_type: "rrf"
+  ranker_type: "weighted"
   # Weights for [dense_vector, sparse_bm25] when using weighted ranker
   # Example: [0.7, 0.3] favors semantic search, [0.3, 0.7] favors keyword search
   ranker_weights: [0.5, 0.5]
