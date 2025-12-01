@@ -12,7 +12,7 @@ from app.rag.embeddings.embedding_factory import get_embedding_model
 from app.rag.vector_stores.vector_store_factory import get_vector_store
 from app.rag.retrieval_optimization import RetrievalOptimizationModule
 from app.rag.generation_integration import GenerationIntegrationModule
-from app.rag.rerankers.llm_reranker import LLMReranker
+from app.rag.rerankers.siliconflow_reranker import SiliconFlowReranker
 
 logger = logging.getLogger(__name__)
 
@@ -38,20 +38,21 @@ class RAGService:
         
         self.data_sources: Dict[str, BaseDataSource] = {}
         self.retrieval_modules: Dict[str, RetrievalOptimizationModule] = {}
-        self.reranker: LLMReranker | None = None
+        self.reranker: SiliconFlowReranker | None = None
 
         self._load_knowledge_bases()
 
         self.generation_module = GenerationIntegrationModule(
             model_name=self.config.llm.model_name,
             temperature=self.config.llm.temperature,
+            max_tokens=self.config.llm.max_tokens, # type: ignore
             api_key=self.config.llm.api_key,  # type: ignore
             base_url=self.config.llm.base_url
         )
 
         if self.config.reranker.enabled:
-            logger.info("Reranker is enabled. Initializing LLMReranker.")
-            self.reranker = LLMReranker(self.config.reranker)
+            logger.info("Reranker is enabled. Initializing SiliconFlowReranker.")
+            self.reranker = SiliconFlowReranker(self.config.reranker)
 
         self._initialized = True
         logger.info("RAGService initialized successfully with multiple knowledge bases.")
