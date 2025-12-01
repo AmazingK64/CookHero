@@ -3,12 +3,13 @@ import logging
 import httpx
 from typing import List
 
+from app.rag.rerankers.base import BaseReranker
 from langchain_core.documents import Document
 from app.core.rag_config import RerankerConfig
 
 logger = logging.getLogger(__name__)
 
-class SiliconFlowReranker:
+class SiliconFlowReranker(BaseReranker):
     """
     A reranker that uses the dedicated SiliconFlow rerank API endpoint.
     """
@@ -37,9 +38,6 @@ class SiliconFlowReranker:
         Returns:
             A filtered and sorted list of documents deemed most relevant.
         """
-        if not self.config.enabled:
-            return documents
-        
         if not documents:
             return []
 
