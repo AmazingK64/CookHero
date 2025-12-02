@@ -193,6 +193,5 @@ class RetrievalOptimizationModule:
             logger.info(f"Query contains semantic indicators, using weighted ranker with dense bias")
             return "weighted", [1, 0]  # Favor dense/semantic
         
-        # Balanced queries → use RRF
-        logger.info(f"Balanced query, using RRF ranker")
-        return "rrf", [0.8, 0.2]
+        # Balanced queries
+        return "weighted", [0.5, 0.5]

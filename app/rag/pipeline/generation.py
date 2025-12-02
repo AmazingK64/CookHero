@@ -41,7 +41,7 @@ class GenerationIntegrationModule:
         return ChatOpenAI(
             model=self.model_name,
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_tokens=self.max_tokens, # type: ignore
             api_key=self.api_key,
             base_url=self.base_url or None
         )
@@ -92,7 +92,7 @@ class GenerationIntegrationModule:
         else:
             return chain.invoke(query)
             
-    def _build_context_string(self, docs: List[Document], max_length: int = 8000) -> str:
+    def _build_context_string(self, docs: List[Document]) -> str:
         """
         Builds a formatted, structured string from the list of context documents.
         
@@ -117,11 +117,6 @@ class GenerationIntegrationModule:
             content = doc.page_content
             
             doc_str = header + content + "\n"
-            
-            if current_length + len(doc_str) > max_length:
-                # If adding the next doc would exceed the limit, stop.
-                logger.warning(f"Context length limit ({max_length} chars) reached. Truncating.")
-                break
                 
             context_parts.append(doc_str)
             current_length += len(doc_str)
