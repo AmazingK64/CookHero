@@ -78,6 +78,8 @@ class SiliconFlowReranker(BaseReranker):
             score = res.get("relevance_score", 0.0)
             index = res.get("index")
 
+            logger.info(f"Document: {documents[index].metadata['source']}, Rerank score: {score}")
+
             if score >= self.config.score_threshold:
                 # The index from the API corresponds to the original documents list
                 original_doc = documents[index]
