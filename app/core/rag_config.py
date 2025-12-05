@@ -53,9 +53,14 @@ class TipsConfig(BaseModel):
     path_suffix: str
     headers_to_split_on: List[List[str]]
 
+class GenericTextConfig(BaseModel):
+    path_suffix: str
+    window_size: int = 3
+
 class DataSourceConfig(BaseModel):
     howtocook: HowToCookConfig
     tips: TipsConfig
+    generic_text: GenericTextConfig
 
 # --- Main Configuration Model ---
 

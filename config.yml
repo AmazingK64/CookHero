@@ -13,6 +13,7 @@ vector_store:
   collection_names:
     recipes: "cook_hero_recipes"
     tips: "cook_hero_tips"
+    generic_text: "cook_hero_generic_text"
 
 embedding:
   # Can be 'local' or 'remote'
@@ -73,3 +74,7 @@ data_source:
     headers_to_split_on:
       - ["#", "header_1"]
       - ["##", "header_2"]
+  # Settings specific to the Generic Text data source
+  generic_text:
+    path_suffix: "generic_text" # Assumes text files are in data/generic_text/
+    window_size: 3 # Window size for Sentence Window Indexing (3 sentences before and after)
