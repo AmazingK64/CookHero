@@ -5,28 +5,6 @@ This module centralizes all prompt templates used in the RAG pipeline.
 
 from langchain_core.prompts import ChatPromptTemplate
 
-# --- 1. Query Routing Prompt ---
-
-ROUTING_PROMPT_TEMPLATE = """
-<|system|>
-你是一名擅长将用户的烹饪相关问题路由到正确知识库的专家。
-根据用户的问题，判断他们是在询问 'recipes'（食谱） 还是 'tips'（技巧）。
-
-1.  **recipes**（食谱）：如果用户询问具体菜肴的制作说明、寻求餐饮推荐，或询问特定菜肴的配料，请选择此项。
-    示例："宫保鸡丁怎么做？"、"周末晚餐有什么简单的推荐？"、"做意面需要什么材料？"。
-
-2.  **tips**（技巧）：如果用户询问通用的烹饪技术、如何使用或维护厨房设备、食物储存或烹饪原理，请选择此项。
-    示例："如何正确磨刀？"、"保存新鲜香草最好的方法是什么？"、"解释一下美拉德反应。"。
-
-你的回答必须严格为以下两个字符串之一：'recipes' 或 'tips'。不要添加任何其他文本或解释。
-<|user|>
-用户问题: {query}
-<|assistant|>
-分类结果:
-"""
-ROUTING_PROMPT = ChatPromptTemplate.from_template(ROUTING_PROMPT_TEMPLATE)
-
-
 # --- 2. Query Rewriting Prompt ---
 
 REWRITE_PROMPT_TEMPLATE = """

@@ -4,21 +4,28 @@ from typing import List
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_openai import ChatOpenAI
 
 from app.rag.pipeline.prompts import (
-    ROUTING_PROMPT,
     REWRITE_PROMPT,
     GENERATION_PROMPT,
 )
 
 logger = logging.getLogger(__name__)
 
+def make_debug_input(invoker_name):
+    def debug_input(x):
+        print(f"=== {invoker_name} Final Input ===")
+        print(x)
+        print("======================")
+        return x
+    return debug_input
+
 class GenerationIntegrationModule:
     """
-    Integrates with a Large Language Model (LLM) for routing, rewriting,
-    and response generation tasks.
+    Integrates with a Large Language Model (LLM) for rewriting and 
+    response generation tasks.
     """
 
     def __init__(self, model_name: str, temperature: float, max_tokens: int, api_key: str, base_url: str | None = None):
@@ -45,20 +52,6 @@ class GenerationIntegrationModule:
             api_key=self.api_key,
             base_url=self.base_url or None
         )
-        
-    def route_query(self, query: str) -> str:
-        """
-        Uses the LLM to classify the user's query to determine which data source to use.
-        """
-        chain = ROUTING_PROMPT | self.llm | StrOutputParser()
-        result = chain.invoke({"query": query}).strip().lower().replace("'", "")
-        
-        if result in ['recipes', 'tips']:
-            logger.info(f"Query routed to data source: '{result}'")
-            return result
-        
-        logger.warning(f"Query router failed to classify, defaulting to 'recipes'. Raw output: {result}")
-        return 'recipes'
 
     def rewrite_query(self, query: str) -> str:
         """
@@ -74,15 +67,16 @@ class GenerationIntegrationModule:
         
         return rewritten_query
 
-    def generate_response(self, query: str, context_docs: List[Document], stream: bool = False):
+    def generate_response(self, query: str, context_docs: List[str], stream: bool = False):
         """
-        Generates a final answer based on the query and retrieved context.
+        Generates a final answer based on the query and a list of context strings.
         """
         context_str = self._build_context_string(context_docs)
         
         chain = (
             {"question": RunnablePassthrough(), "context": lambda _: context_str}
             | GENERATION_PROMPT
+            # | RunnableLambda(make_debug_input("generate_response"))
             | self.llm
             | StrOutputParser()
         )
@@ -92,33 +86,19 @@ class GenerationIntegrationModule:
         else:
             return chain.invoke(query)
             
-    def _build_context_string(self, docs: List[Document]) -> str:
+    def _build_context_string(self, docs: List[str]) -> str:
         """
-        Builds a formatted, structured string from the list of context documents.
-        
-        Args:
-            docs: A list of retrieved Document objects.
-            max_length: The approximate maximum character length for the context string.
-            
-        Returns:
-            A single string containing the formatted context, ready for the LLM.
+        Builds a formatted, structured string from the list of context strings.
         """
         if not docs:
             return "No relevant information found."
         
         context_parts = []
-        current_length = 0
-        
-        for i, doc in enumerate(docs):
-            source = doc.metadata.get('source', 'Unknown Source')
-            dish_name = doc.metadata.get('dish_name', 'General Information')
-            
-            header = f"--- Context Document [{i+1}] ---\nSource: {source}\nTopic: {dish_name}\n\n"
-            content = doc.page_content
+        for i, doc_content in enumerate(docs):
+            header = f"--- Context Document [{i+1}] ---\n\n"
+            content = doc_content
             
             doc_str = header + content + "\n"
-                
             context_parts.append(doc_str)
-            current_length += len(doc_str)
             
         return "\n".join(context_parts)
