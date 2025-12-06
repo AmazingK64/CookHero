@@ -14,12 +14,7 @@ class VectorStoreConfig(BaseModel):
     collection_names: Dict[str, str]
 
 class EmbeddingConfig(BaseModel):
-    mode: Literal['local', 'remote']
-    local_model: str
-    remote_model: str
-    api_url: str
-    batch_size: int
-    api_key: Optional[str] = None  # Sensitive, will be loaded from .env
+    model_name: str
 
 class LLMConfig(BaseModel):
     model_name: str

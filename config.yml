@@ -16,16 +16,8 @@ vector_store:
     generic_text: "cook_hero_generic_text"
 
 embedding:
-  # Can be 'local' or 'remote'
-  mode: 'local'
-  
-  # Settings for local model
-  local_model: "BAAI/bge-small-zh-v1.5"
-  
-  # Settings for remote API
-  remote_model: "BAAI/bge-m3"
-  api_url: "https://api.siliconflow.cn/v1"
-  batch_size: 64
+  # Local embedding model only
+  model_name: "BAAI/bge-small-zh-v1.5"
 
 llm:
   # Model name for the language model
