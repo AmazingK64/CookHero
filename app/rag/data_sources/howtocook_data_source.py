@@ -59,17 +59,38 @@ class HowToCookDataSource(BaseDataSource):
         """
         Converts retrieved child chunks back to their full parent documents.
         This implements the "small to large" retrieval pattern.
+        Preserves the highest retrieval score from child chunks to parent documents.
         """
         if not self.parent_doc_map:
             logger.warning("Parent document map not loaded for Tips. Loading them now.")
             self.parent_documents = self._load_parent_documents()
             self.parent_doc_map = {doc.id: doc for doc in self.parent_documents}
 
-        parent_ids = {chunk.metadata.get("parent_id") for chunk in retrieved_chunks if chunk.metadata.get("parent_id")}
-        final_docs = [self.parent_doc_map[pid] for pid in parent_ids if pid in self.parent_doc_map]
+        # Group chunks by parent_id and find the highest score for each parent
+        parent_scores = {}
+        for chunk in retrieved_chunks:
+            parent_id = chunk.metadata.get("parent_id")
+            if parent_id:
+                score = chunk.metadata.get("retrieval_score", 0.0)
+                if parent_id not in parent_scores or score > parent_scores[parent_id]:
+                    parent_scores[parent_id] = score
+
+        # Get parent documents and set their retrieval scores
+        final_docs = []
+        for parent_id, max_score in parent_scores.items():
+            if parent_id in self.parent_doc_map:
+                parent_doc = self.parent_doc_map[parent_id]
+                # Create a copy to avoid modifying the original
+                parent_doc = Document(
+                    id=parent_doc.id,
+                    page_content=parent_doc.page_content,
+                    metadata=parent_doc.metadata.copy()
+                )
+                parent_doc.metadata['retrieval_score'] = max_score
+                final_docs.append(parent_doc)
         
-        logger.info(f"Retrieved {len(retrieved_chunks)} tip chunks, corresponding to "
-                    f"{len(final_docs)} unique parent tip documents.")
+        logger.info(f"Retrieved {len(retrieved_chunks)} chunks, corresponding to "
+                    f"{len(final_docs)} unique parent documents.")
         return final_docs
 
     def _load_parent_documents(self) -> List[Document]:

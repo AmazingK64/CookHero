@@ -147,15 +147,16 @@ class RAGService:
                  ranker_type, ranker_weights = retrieval_module.intelligent_ranker_selection(rewritten_query)
 
             # Retrieve docs from one source
-            retrieved_docs, _ = retrieval_module.hybrid_search(
+            retrieved_docs, retrieved_scores = retrieval_module.hybrid_search(
                 rewritten_query,
                 top_k=self.config.retrieval.top_k, # Retrieve top_k from each source
                 ranker_type=ranker_type,
                 ranker_weights=ranker_weights
             )
-            # Add source name to metadata for later processing
-            for doc in retrieved_docs:
+            # Add source name and score to metadata for later processing
+            for doc, score in zip(retrieved_docs, retrieved_scores):
                 doc.metadata['data_source'] = name
+                doc.metadata['retrieval_score'] = score
             all_retrieved_docs.extend(retrieved_docs)
         
         logger.info(f"--- Aggregated {len(all_retrieved_docs)} documents from all sources ---")
@@ -178,15 +179,44 @@ class RAGService:
             processed_docs.extend(data_source.post_process_retrieval(docs))
 
         # Remove duplicates that might arise from post-processing
-        unique_processed_docs = {doc.page_content: doc for doc in processed_docs}.values()
+        # Use a dict to track unique docs and keep the one with highest score
+        unique_processed_docs_dict = {}
+        for doc in processed_docs:
+            content_key = doc.page_content
+            current_score = doc.metadata.get('retrieval_score', 0.0)
+            if content_key not in unique_processed_docs_dict:
+                unique_processed_docs_dict[content_key] = doc
+            else:
+                # Keep the doc with higher score
+                existing_score = unique_processed_docs_dict[content_key].metadata.get('retrieval_score', 0.0)
+                if current_score > existing_score:
+                    unique_processed_docs_dict[content_key] = doc
+        
+        unique_processed_docs = list(unique_processed_docs_dict.values())
         logger.info(f"Total unique documents after post-processing: {len(unique_processed_docs)}")
         
-        # Now, rerank the unified list of documents
-        if self.reranker and self.config.reranker.enabled:
-            logger.info(f"Reranking {len(unique_processed_docs)} documents...")
-            final_docs = self.reranker.rerank(rewritten_query, list(unique_processed_docs))
+        # Sort documents by retrieval score (highest first) and take top_k before reranking
+        unique_processed_docs.sort(
+            key=lambda doc: doc.metadata.get('retrieval_score', 0.0),
+            reverse=True
+        )
+        
+        # Use retrieval.top_k as the limit before reranking
+        top_k_before_rerank = self.config.retrieval.top_k
+        docs_for_rerank = unique_processed_docs[:top_k_before_rerank]
+        if docs_for_rerank:
+            logger.info(f"Selected top {len(docs_for_rerank)} documents (score range: "
+                       f"{docs_for_rerank[-1].metadata.get('retrieval_score', 0.0):.4f} - "
+                       f"{docs_for_rerank[0].metadata.get('retrieval_score', 0.0):.4f}) for reranking")
         else:
-            final_docs = list(unique_processed_docs)
+            logger.warning("No documents selected for reranking after post-processing and sorting.")
+        
+        # Now, rerank the top-k documents
+        if self.reranker and self.config.reranker.enabled:
+            logger.info(f"Reranking {len(docs_for_rerank)} documents...")
+            final_docs = self.reranker.rerank(rewritten_query, docs_for_rerank)
+        else:
+            final_docs = docs_for_rerank
 
         # 4. Build final context for LLM
         context_parts = []
