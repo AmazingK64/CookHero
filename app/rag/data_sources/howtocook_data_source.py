@@ -68,8 +68,8 @@ class HowToCookDataSource(BaseDataSource):
             self.parent_doc_map = {doc.id: doc for doc in self.parent_documents}
 
         # Check if any retrieved chunks are from the dish index
-        index_chunks = [chunk for chunk in retrieved_chunks if chunk.metadata.get("is_dish_index", False)]
-        regular_chunks = [chunk for chunk in retrieved_chunks if not chunk.metadata.get("is_dish_index", False)]
+        index_chunks = [chunk for chunk in retrieved_chunks if chunk.metadata.get("chunk_index", 0) == -1]
+        regular_chunks = [chunk for chunk in retrieved_chunks if not chunk.metadata.get("chunk_index", 0) == -1]
         
         final_docs = []
         
@@ -108,7 +108,7 @@ class HowToCookDataSource(BaseDataSource):
             if parent_id in self.parent_doc_map:
                 parent_doc = self.parent_doc_map[parent_id]
                 # Skip the index document if we already added it
-                if parent_doc.metadata.get("is_dish_index", False):
+                if parent_doc.metadata.get("chunk_index", 0) == -1:
                     continue
                 # Create a copy to avoid modifying the original
                 parent_doc = Document(
@@ -204,9 +204,7 @@ class HowToCookDataSource(BaseDataSource):
                 "parent_id": None,
                 "dish_name": "菜谱索引",
                 "category": "索引",
-                "is_dish_index": True,  # Special flag to identify this document
-                "total_dishes": sum(len(dishes) for dishes in dishes_by_category.values()),
-                "categories": list(dishes_by_category.keys())
+                "difficulty": "未知",
             }
         )
         
@@ -254,9 +252,13 @@ class HowToCookDataSource(BaseDataSource):
                 )
                 index_chunk.metadata.update({
                     "parent_id": doc.id,
-                    "chunk_index": 0,
+                    "chunk_index": -1,
                     "is_dish_index": True
                 })
+                # Ensure all header_keys are present (required by Milvus schema)
+                for key in header_keys:
+                    if key not in index_chunk.metadata:
+                        index_chunk.metadata[key] = ""
                 all_chunks.append(index_chunk)
                 logger.info("Created recommendation-focused chunk for dish index document")
             else:
@@ -285,7 +287,7 @@ class HowToCookDataSource(BaseDataSource):
         total_dishes = index_metadata.get("total_dishes", 0)
         
         content_parts = []
-        content_parts.append("推荐菜，菜谱列表，")
+        content_parts.append("推荐菜，菜谱列表，荤素搭配，搭配合理，营养均衡，健康饮食，家常菜，菜品，食谱，")
         
         # Add category-specific recommendation keywords
         for category in sorted(categories):
