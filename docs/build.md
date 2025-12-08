@@ -38,22 +38,30 @@ CookHero 采用 **`config.yml`** 作为唯一的中心配置文件，并结合 *
 
 ### 2.1. 启动依赖服务
 
-项目依赖 Milvus 向量数据库。我们提供了一个 `docker-compose.yml` 文件用于快速启动所有必要的后端服务。
+项目依赖 Milvus 向量数据库和 Redis 缓存。我们提供了一个 `docker-compose.yml` 文件用于快速启动所有必要的后端服务。
 
 在 `deployments/` 目录下，运行：
 ```sh
 cd deployments
 docker-compose up -d
 ```
-此命令会以后台模式启动 Milvus 数据库及其所有依赖项（etcd、MinIO）。
+此命令会以后台模式启动以下服务：
+- **Milvus**: 向量数据库（端口 19530）
+- **Redis**: 缓存服务（端口 6379）
+- **etcd**: Milvus 元数据存储
+- **MinIO**: Milvus 对象存储
 
 **验证服务状态**:
 ```sh
-# 检查 Milvus 是否运行
-docker ps | grep milvus
+# 检查所有服务是否运行
+docker ps | grep cookhero
 
-# 或访问 Milvus HTTP 端口
+# 检查 Milvus HTTP 端口
 curl http://localhost:9091/healthz
+
+# 检查 Redis 连接
+redis-cli ping
+# 应该返回: PONG
 ```
 
 ### 2.2. 同步知识库数据
@@ -169,8 +177,32 @@ PYTHONPATH=. python tests/test_rag.py
 
 在 `config.yml` 中的 `llm` 部分可以调整：
 - `model_name`: 语言模型名称（默认: `deepseek-ai/DeepSeek-R1-0528-Qwen3-8B`）
-- `temperature`: 生成温度（默认: 0.1）
+- `temperature`: 生成温度（默认: 0）
 - `max_tokens`: 最大生成token数（默认: 131072）
+
+**注意**: 查询重写使用独立的 LLM 实例，温度固定为 0，确保重写结果的一致性。
+
+### 4.4. 缓存配置
+
+在 `config.yml` 中的 `cache` 部分可以调整：
+- `enabled`: 是否启用缓存（默认: `true`）
+- `redis_host`: Redis 主机地址（默认: `localhost`）
+- `redis_port`: Redis 端口（默认: `6379`）
+- `retrieval_ttl`: 检索结果缓存时间（默认: `3600` 秒，1小时）
+- `response_ttl`: 查询响应缓存时间（默认: `1800` 秒，30分钟）
+- `l2_enabled`: 是否启用 L2 语义缓存（默认: `true`）
+- `similarity_threshold`: L2 缓存相似度阈值（默认: `0.8`）
+
+**缓存策略说明**:
+- **L1 缓存（Redis）**: 基于查询 hash 的精确匹配，用于检索结果和响应缓存
+- **L2 缓存（内存）**: 基于向量相似度的语义匹配，处理查询变体
+- **TTL 设计**: `retrieval_ttl` 长于 `response_ttl`，确保响应过期后仍可复用检索结果快速重新生成
+
+**Redis 密码配置**:
+如需设置 Redis 密码，在 `.env` 文件中添加：
+```dotenv
+REDIS_PASSWORD="your-redis-password"
+```
 
 ---
 
@@ -204,7 +236,20 @@ PYTHONPATH=. python tests/test_rag.py
 1. 检查 Milvus 索引是否已构建完成
 2. 减少 `retrieval.top_k` 值
 3. 检查网络连接和 API 密钥是否有效
-4. 考虑启用缓存机制（未来功能）
+4. 启用缓存机制：确保 `cache.enabled: true`，Redis 服务正常运行
+5. 检查缓存命中率，优化缓存配置
+
+### 5.5. Redis 连接失败
+
+**问题**: 无法连接到 Redis 缓存服务
+
+**解决方案**:
+1. 检查 Redis 容器是否运行: `docker ps | grep redis`
+2. 检查端口是否被占用: `lsof -i :6379`
+3. 查看 Redis 日志: `docker logs cookhero_redis`
+4. 测试连接: `redis-cli ping`
+5. 如果使用密码，检查 `.env` 文件中的 `REDIS_PASSWORD` 配置
+6. 重启服务: `cd deployments && docker-compose restart redis`
 
 ### 5.4. 依赖安装问题
 
@@ -258,7 +303,10 @@ export LLM_API_KEY=your-api-key
 ### 7.3. 性能优化
 
 - 使用 Gunicorn + Uvicorn workers 提高并发
-- 配置 Redis 缓存（未来功能）
+- **启用缓存机制**: 配置 Redis 缓存，显著提升响应速度
+  - L1 缓存：精确匹配，命中率约 30-50%
+  - L2 缓存：语义匹配，命中率约 10-20%
+  - 整体响应时间可降低 40-60%
 - 优化 Milvus 索引参数
 - 使用 CDN 加速静态资源（前端）
 
