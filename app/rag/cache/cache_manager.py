@@ -39,8 +39,8 @@ class CacheManager:
         redis_port: int = 6379,
         redis_db: int = 0,
         redis_password: Optional[str] = None,
-        retrieval_ttl: int = 1800,  # 30 minutes
-        response_ttl: int = 3600,  # 1 hour
+        retrieval_ttl: int = 3600,  # 1 hour (longer than response_ttl)
+        response_ttl: int = 1800,  # 30 minutes (shorter than retrieval_ttl)
         similarity_threshold: float = 0.95,
         embeddings: Optional[Embeddings] = None,
         l2_enabled: bool = True
@@ -53,8 +53,12 @@ class CacheManager:
             redis_port: Redis port
             redis_db: Redis database number
             redis_password: Redis password (if required)
-            retrieval_ttl: Time-to-live for retrieval cache (seconds)
-            response_ttl: Time-to-live for response cache (seconds)
+            retrieval_ttl: Time-to-live for retrieval cache (seconds).
+                Should be longer than response_ttl so retrieval results can be
+                reused even after responses expire.
+            response_ttl: Time-to-live for response cache (seconds).
+                Should be shorter than retrieval_ttl since users may want
+                varied responses, but retrieval results change infrequently.
             similarity_threshold: Minimum similarity for L2 cache matching (0-1)
             embeddings: Embedding model for L2 semantic matching (optional)
             l2_enabled: Whether to enable L2 semantic cache
