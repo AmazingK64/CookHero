@@ -7,19 +7,94 @@ Cache Manager implementing hybrid caching strategy:
 import hashlib
 import logging
 import pickle
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Any, Dict
 
 import redis
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
-from app.rag.cache.backends import (
-    BaseL2Backend,
-    MemoryL2Backend,
-    RedisVectorL2Backend,
-)
+from app.rag.cache.base import KeywordCacheBackend, VectorCacheBackend
 
 logger = logging.getLogger(__name__)
+
+
+def _cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+    if len(vec1) != len(vec2):
+        return 0.0
+    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+    magnitude1 = sum(a * a for a in vec1) ** 0.5
+    magnitude2 = sum(b * b for b in vec2) ** 0.5
+    if magnitude1 == 0 or magnitude2 == 0:
+        return 0.0
+    return dot_product / (magnitude1 * magnitude2)
+
+
+class RedisKeywordCache(KeywordCacheBackend):
+    def __init__(self, client: redis.Redis):
+        self.client = client
+
+    def get(self, key: str) -> Optional[bytes]:
+        try:
+            return self.client.get(key)
+        except Exception:
+            return None
+
+    def set(self, key: str, value: bytes, ttl_seconds: int | None = None) -> bool:
+        try:
+            if ttl_seconds:
+                self.client.setex(key, ttl_seconds, value)
+            else:
+                self.client.set(key, value)
+            return True
+        except Exception:
+            return False
+
+    def delete(self, key: str) -> bool:
+        try:
+            self.client.delete(key)
+            return True
+        except Exception:
+            return False
+
+    def clear(self, pattern: str | None = None) -> bool:
+        try:
+            pat = pattern or "*"
+            keys = self.client.keys(pat)
+            if keys:
+                self.client.delete(*keys)
+            return True
+        except Exception:
+            return False
+
+
+class MemoryVectorCache(VectorCacheBackend):
+    """
+    Simple in-memory vector cache.
+    Stores: {key: (embedding, payload)}
+    """
+    def __init__(self):
+        self.store: Dict[str, Tuple[List[float], Any]] = {}
+
+    def add(self, key: str, embedding: List[float], payload: Any) -> bool:
+        self.store[key] = (embedding, payload)
+        return True
+
+    def search(self, embedding: List[float], threshold: float) -> Optional[Tuple[Any, float]]:
+        best_match = None
+        best_similarity = 0.0
+        for _key, (emb, payload) in self.store.items():
+            sim = _cosine_similarity(embedding, emb)
+            if sim > best_similarity and sim >= threshold:
+                best_similarity = sim
+                best_match = payload
+        if best_match is not None:
+            logger.info(f"Memory L2 HIT similarity={best_similarity:.4f}")
+            return best_match, best_similarity
+        return None
+
+    def clear(self) -> bool:
+        self.store.clear()
+        return True
 
 
 class CacheManager:
@@ -46,11 +121,7 @@ class CacheManager:
         response_ttl: int = 3600,  # 1 hour
         similarity_threshold: float = 0.95,
         embeddings: Optional[Embeddings] = None,
-        l2_enabled: bool = True,
-        l2_backend: str = "memory",
-        l2_max_items: int = 500,
-        l2_ttl_seconds: int = 3600,
-        redis_vector_scan_limit: int = 2000,
+        l2_enabled: bool = True
     ):
         """
         Initialize the cache manager.
@@ -70,51 +141,34 @@ class CacheManager:
         self.response_ttl = response_ttl
         self.similarity_threshold = similarity_threshold
         self.l2_enabled = l2_enabled
-        
-        # Initialize Redis connection (L1 cache)
+        # Initialize Redis connection (for keyword cache)
+        self.redis_client: Optional[redis.Redis] = None
         try:
-            self.redis_client = redis.Redis(
+            client = redis.Redis(
                 host=redis_host,
                 port=redis_port,
                 db=redis_db,
                 password=redis_password,
-                decode_responses=False,  # We'll handle encoding/decoding ourselves
+                decode_responses=False,
                 socket_connect_timeout=5,
-                socket_timeout=5
+                socket_timeout=5,
             )
-            # Test connection
-            self.redis_client.ping()
+            client.ping()
+            self.redis_client = client
             logger.info(f"Redis connection established: {redis_host}:{redis_port}")
         except Exception as e:
             logger.warning(f"Failed to connect to Redis: {e}. Caching will be disabled.")
             self.redis_client = None
-        
-        # Initialize embeddings for L2 cache
+
+        # Backends
+        self.keyword_cache: Optional[KeywordCacheBackend] = RedisKeywordCache(self.redis_client) if self.redis_client else None
+
         self.embeddings = embeddings
         if l2_enabled and embeddings is None:
             logger.warning("L2 cache enabled but no embeddings provided. L2 cache will be disabled.")
             self.l2_enabled = False
 
-        # L2 backend
-        self.l2_backend: Optional[BaseL2Backend] = None
-        if self.l2_enabled:
-            if l2_backend == "memory":
-                self.l2_backend = MemoryL2Backend(max_items=l2_max_items, ttl_seconds=l2_ttl_seconds)
-                logger.info(f"L2 backend initialized: memory (max_items={l2_max_items}, ttl={l2_ttl_seconds}s)")
-            elif l2_backend == "redis_vector":
-                if self.redis_client:
-                    self.l2_backend = RedisVectorL2Backend(
-                        redis_client=self.redis_client,
-                        ttl_seconds=l2_ttl_seconds,
-                        max_scan=redis_vector_scan_limit,
-                    )
-                    logger.info("L2 backend initialized: redis_vector")
-                else:
-                    logger.warning("L2 backend redis_vector requested but Redis not available; disabling L2.")
-                    self.l2_enabled = False
-            else:
-                logger.warning(f"Unknown L2 backend '{l2_backend}', disabling L2.")
-                self.l2_enabled = False
+        self.vector_cache: Optional[VectorCacheBackend] = MemoryVectorCache() if self.l2_enabled else None
         
     def _compute_hash(self, text: str) -> str:
         """Compute SHA256 hash of a text string."""
@@ -145,12 +199,12 @@ class CacheManager:
         Returns:
             Cached documents if found, None otherwise
         """
-        if not self.redis_client:
+        if not self.keyword_cache:
             return None
         
         try:
             cache_key = self._get_retrieval_key(data_source, rewritten_query)
-            cached_data = self.redis_client.get(cache_key)
+            cached_data = self.keyword_cache.get(cache_key)
             
             if cached_data:
                 # Deserialize documents
@@ -181,14 +235,14 @@ class CacheManager:
         Returns:
             True if caching succeeded, False otherwise
         """
-        if not self.redis_client:
+        if not self.keyword_cache:
             return False
         
         try:
             cache_key = self._get_retrieval_key(data_source, rewritten_query)
             # Serialize documents
             serialized = pickle.dumps(documents)
-            self.redis_client.setex(cache_key, self.retrieval_ttl, serialized)
+            self.keyword_cache.set(cache_key, serialized, ttl_seconds=self.retrieval_ttl)
             logger.info(f"Cached retrieval results for source '{data_source}': {len(documents)} documents (TTL: {self.retrieval_ttl}s)")
             return True
         except Exception as e:
@@ -209,10 +263,10 @@ class CacheManager:
             Cached response if found, None otherwise
         """
         # Try L1 cache first (exact match)
-        if self.redis_client:
+        if self.keyword_cache:
             try:
                 cache_key = self._get_response_key(rewritten_query)
-                cached_response = self.redis_client.get(cache_key)
+                cached_response = self.keyword_cache.get(cache_key)
                 
                 if cached_response:
                     response = cached_response.decode('utf-8')
@@ -222,10 +276,10 @@ class CacheManager:
                 logger.warning(f"Error reading L1 response cache: {e}")
         
         # Try L2 cache (semantic similarity)
-        if self.l2_enabled and self.embeddings and self.l2_backend:
+        if self.l2_enabled and self.embeddings and self.vector_cache:
             try:
                 query_embedding = self.embeddings.embed_query(rewritten_query)
-                best_match = self.l2_backend.search(query_embedding, self.similarity_threshold)
+                best_match = self.vector_cache.search(query_embedding, self.similarity_threshold)
                 
                 if best_match:
                     logger.info(f"Response cache HIT (L2): similarity={best_match[1]:.4f}")
@@ -254,24 +308,20 @@ class CacheManager:
             True if caching succeeded, False otherwise
         """
         # Store in L1 cache (exact match)
-        if self.redis_client:
+        if self.keyword_cache:
             try:
                 cache_key = self._get_response_key(rewritten_query)
-                self.redis_client.setex(
-                    cache_key,
-                    self.response_ttl,
-                    response.encode('utf-8')
-                )
+                self.keyword_cache.set(cache_key, response.encode('utf-8'), ttl_seconds=self.response_ttl)
                 logger.info(f"Cached response (L1): TTL={self.response_ttl}s")
             except Exception as e:
                 logger.warning(f"Error writing L1 response cache: {e}")
         
         # Store in L2 cache (semantic similarity)
-        if self.l2_enabled and self.embeddings and self.l2_backend:
+        if self.l2_enabled and self.embeddings and self.vector_cache:
             try:
                 query_embedding = self.embeddings.embed_query(rewritten_query)
                 query_hash = self._compute_hash(rewritten_query)
-                self.l2_backend.set(query_hash, query_embedding, response)
+                self.vector_cache.add(query_hash, query_embedding, response)
                 logger.info("Cached response (L2): semantic index updated")
             except Exception as e:
                 logger.warning(f"Error writing L2 response cache: {e}")
@@ -333,7 +383,7 @@ class CacheManager:
         Returns:
             True if clearing succeeded, False otherwise
         """
-        if not self.redis_client:
+        if not self.keyword_cache:
             return False
         
         try:
@@ -344,15 +394,13 @@ class CacheManager:
             else:
                 pattern = "rag:*"
             
-            keys = self.redis_client.keys(pattern)
-            if keys:
-                self.redis_client.delete(*keys)
-                logger.info(f"Cleared {len(keys)} cache entries matching '{pattern}'")
+            self.keyword_cache.clear(pattern)
+            logger.info(f"Cleared cache entries matching '{pattern}'")
             
             # Clear L2 cache if needed
             if cache_type is None or cache_type == 'response':
-                if self.l2_backend:
-                    self.l2_backend.clear()
+                if self.vector_cache:
+                    self.vector_cache.clear()
                 logger.info("Cleared L2 semantic cache")
             
             return True
@@ -370,15 +418,13 @@ class CacheManager:
         Returns:
             True if invalidation succeeded, False otherwise
         """
-        if not self.redis_client:
+        if not self.keyword_cache:
             return False
         
         try:
             pattern = f"rag:retrieval:{data_source}:*"
-            keys = self.redis_client.keys(pattern)
-            if keys:
-                self.redis_client.delete(*keys)
-                logger.info(f"Invalidated {len(keys)} cache entries for data source '{data_source}'")
+            self.keyword_cache.clear(pattern)
+            logger.info(f"Invalidated cache entries for data source '{data_source}'")
             return True
         except Exception as e:
             logger.warning(f"Error invalidating data source cache: {e}")
