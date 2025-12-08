@@ -169,86 +169,98 @@ class RAGService:
         if not all([self.retrieval_modules, self.generation_module, self.data_sources]):
             raise RuntimeError("RAG Service is not properly initialized.")
 
-        # 1. Rewrite Query
-        rewritten_query = self.generation_module.rewrite_query(query)
-        
-        # Check response cache first (L1 + L2)
-        if self.cache_manager:
-            cached_response = self.cache_manager.get_response_cache(rewritten_query)
-            if cached_response:
-                logger.info("Returning cached response")
-                return cached_response
-        
-        # Detect if this is a recommendation query (needs more results)
-        is_recommendation_query = self._is_recommendation_query(rewritten_query)
-        # Increase top_k for recommendation queries to get more diverse results
-        retrieval_top_k = self.config.retrieval.top_k * 2 if is_recommendation_query else self.config.retrieval.top_k
-        if is_recommendation_query:
-            logger.info(f"Detected recommendation query, increasing retrieval top_k to {retrieval_top_k}")
+        rewritten_query = self._rewrite_query(query)
+        cached = self._maybe_return_cached_response(rewritten_query)
+        if cached is not None:
+            return cached
 
-        # 2. Parallel Retrieval from all sources
+        is_recommendation_query, retrieval_top_k = self._determine_retrieval_k(rewritten_query)
+        all_retrieved_docs = self._retrieve_from_all_sources(
+            rewritten_query,
+            retrieval_top_k,
+            use_intelligent_ranker,
+        )
+
+        processed_docs = self._post_process(all_retrieved_docs)
+        docs_for_rerank = self._select_for_rerank(processed_docs, retrieval_top_k, is_recommendation_query)
+        final_docs = self._rerank_if_needed(rewritten_query, docs_for_rerank)
+        context_parts = self._build_context(final_docs)
+        return self._generate_and_cache_response(rewritten_query, context_parts, stream)
+
+    # --- Helper methods ---
+
+    def _rewrite_query(self, query: str) -> str:
+        return self.generation_module.rewrite_query(query)
+
+    def _maybe_return_cached_response(self, rewritten_query: str):
+        if not self.cache_manager:
+            return None
+        cached_response = self.cache_manager.get_response_cache(rewritten_query)
+        if cached_response:
+            logger.info("Returning cached response")
+            return cached_response
+        return None
+
+    def _determine_retrieval_k(self, rewritten_query: str) -> tuple[bool, int]:
+        is_rec = self._is_recommendation_query(rewritten_query)
+        top_k = self.config.retrieval.top_k * 2 if is_rec else self.config.retrieval.top_k
+        if is_rec:
+            logger.info(f"Detected recommendation query, increasing retrieval top_k to {top_k}")
+        return is_rec, top_k
+
+    def _retrieve_from_all_sources(
+        self,
+        rewritten_query: str,
+        retrieval_top_k: int,
+        use_intelligent_ranker: bool,
+    ):
         logger.info("--- Starting parallel retrieval from all data sources ---")
         all_retrieved_docs = []
         for name, retrieval_module in self.retrieval_modules.items():
             logger.info(f"Retrieving from source: {name}")
-            
-            # Check retrieval cache first
-            cached_docs = None
-            if self.cache_manager:
-                cached_docs = self.cache_manager.get_retrieval_cache(name, rewritten_query)
-            
+            cached_docs = self.cache_manager.get_retrieval_cache(name, rewritten_query) if self.cache_manager else None
+
             if cached_docs:
                 logger.info(f"Using cached retrieval results for source '{name}': {len(cached_docs)} documents")
-                # Restore scores from cache (if available) or use default
                 for doc in cached_docs:
                     if 'retrieval_score' not in doc.metadata:
-                        doc.metadata['retrieval_score'] = 1.0  # Default score for cached docs
+                        doc.metadata['retrieval_score'] = 1.0
                     doc.metadata['data_source'] = name
                 all_retrieved_docs.extend(cached_docs)
-            else:
-                # Determine ranker type for this specific retrieval
-                ranker_type, ranker_weights = None, None
-                if use_intelligent_ranker:
-                     ranker_type, ranker_weights = retrieval_module.intelligent_ranker_selection(rewritten_query)
+                continue
 
-                # Retrieve docs from one source
-                retrieved_docs, retrieved_scores = retrieval_module.hybrid_search(
-                    rewritten_query,
-                    top_k=retrieval_top_k, # Use adjusted top_k for recommendation queries
-                    ranker_type=ranker_type,
-                    ranker_weights=ranker_weights
-                )
-                # Add source name and score to metadata for later processing
-                for doc, score in zip(retrieved_docs, retrieved_scores):
-                    doc.metadata['data_source'] = name
-                    doc.metadata['retrieval_score'] = score
-                all_retrieved_docs.extend(retrieved_docs)
-                
-                # Cache retrieval results
-                if self.cache_manager:
-                    self.cache_manager.set_retrieval_cache(name, rewritten_query, retrieved_docs)
-        
+            ranker_type = ranker_weights = None
+            if use_intelligent_ranker:
+                ranker_type, ranker_weights = retrieval_module.intelligent_ranker_selection(rewritten_query)
+
+            retrieved_docs, retrieved_scores = retrieval_module.hybrid_search(
+                rewritten_query,
+                top_k=retrieval_top_k,
+                ranker_type=ranker_type,
+                ranker_weights=ranker_weights,
+            )
+            for doc, score in zip(retrieved_docs, retrieved_scores):
+                doc.metadata['data_source'] = name
+                doc.metadata['retrieval_score'] = score
+            all_retrieved_docs.extend(retrieved_docs)
+
+            if self.cache_manager:
+                self.cache_manager.set_retrieval_cache(name, rewritten_query, retrieved_docs)
+
         logger.info(f"--- Aggregated {len(all_retrieved_docs)} documents from all sources ---")
+        return all_retrieved_docs
 
-        # 3. Unified Post-processing and Reranking
-        
-        # First, apply source-specific post-processing
+    def _post_process(self, all_retrieved_docs):
         processed_docs = []
-        # Separate docs by source
         docs_by_source = {}
         for doc in all_retrieved_docs:
             source_name = doc.metadata.get('data_source')
-            if source_name not in docs_by_source:
-                docs_by_source[source_name] = []
-            docs_by_source[source_name].append(doc)
+            docs_by_source.setdefault(source_name, []).append(doc)
 
         for source_name, docs in docs_by_source.items():
             data_source = self.data_sources[source_name]
-            # generic_text chunks are processed as is, others get parent documents
             processed_docs.extend(data_source.post_process_retrieval(docs))
 
-        # Remove duplicates that might arise from post-processing
-        # Use a dict to track unique docs and keep the one with highest score
         unique_processed_docs_dict = {}
         for doc in processed_docs:
             content_key = doc.page_content
@@ -256,65 +268,57 @@ class RAGService:
             if content_key not in unique_processed_docs_dict:
                 unique_processed_docs_dict[content_key] = doc
             else:
-                # Keep the doc with higher score
                 existing_score = unique_processed_docs_dict[content_key].metadata.get('retrieval_score', 0.0)
                 if current_score > existing_score:
                     unique_processed_docs_dict[content_key] = doc
-        
+
         unique_processed_docs = list(unique_processed_docs_dict.values())
         logger.info(f"Total unique documents after post-processing: {len(unique_processed_docs)}")
-        
-        # Sort documents by retrieval score (highest first) and take top_k before reranking
         unique_processed_docs.sort(
             key=lambda doc: doc.metadata.get('retrieval_score', 0.0),
-            reverse=True
+            reverse=True,
         )
-        
-        # Use retrieval.top_k as the limit before reranking
-        # For recommendation queries, allow more documents to pass through
+        return unique_processed_docs
+
+    def _select_for_rerank(self, processed_docs, retrieval_top_k: int, is_recommendation_query: bool):
         top_k_before_rerank = retrieval_top_k if is_recommendation_query else self.config.retrieval.top_k
-        docs_for_rerank = unique_processed_docs[:top_k_before_rerank]
+        docs_for_rerank = processed_docs[:top_k_before_rerank]
         if docs_for_rerank:
-            logger.info(f"Selected top {len(docs_for_rerank)} documents (score range: "
-                       f"{docs_for_rerank[-1].metadata.get('retrieval_score', 0.0):.4f} - "
-                       f"{docs_for_rerank[0].metadata.get('retrieval_score', 0.0):.4f}) for reranking")
+            logger.info(
+                f"Selected top {len(docs_for_rerank)} documents (score range: "
+                f"{docs_for_rerank[-1].metadata.get('retrieval_score', 0.0):.4f} - "
+                f"{docs_for_rerank[0].metadata.get('retrieval_score', 0.0):.4f}) for reranking"
+            )
         else:
             logger.warning("No documents selected for reranking after post-processing and sorting.")
-        
-        # Now, rerank the top-k documents
+        return docs_for_rerank
+
+    def _rerank_if_needed(self, rewritten_query: str, docs_for_rerank):
         if self.reranker and self.config.reranker.enabled:
             logger.info(f"Reranking {len(docs_for_rerank)} documents...")
-            final_docs = self.reranker.rerank(rewritten_query, docs_for_rerank)
-        else:
-            final_docs = docs_for_rerank
+            return self.reranker.rerank(rewritten_query, docs_for_rerank)
+        return docs_for_rerank
 
-        # 4. Build final context for LLM
+    def _build_context(self, final_docs):
         context_parts = []
         for doc in final_docs:
             source_name = doc.metadata.get('data_source')
-            # If the doc is a sentence chunk, use its window context
             if source_name == 'generic_text' and 'window' in doc.metadata:
                 context_parts.append(doc.metadata['window'])
             else:
                 context_parts.append(doc.page_content)
-        
-        # 5. Generate Response
-        # For caching, we use temperature=0 to ensure deterministic responses
-        # Check if we need to use deterministic generation for caching
+        return context_parts
+
+    def _generate_and_cache_response(self, rewritten_query: str, context_parts, stream: bool):
         use_deterministic = self.cache_manager is not None and not stream
-        
-        # Generate response with optional temperature override for caching
         response = self.generation_module.generate_response(
             query=rewritten_query,
             context_docs=context_parts,
             stream=stream,
-            temperature=0.0 if use_deterministic else None
+            temperature=0.0 if use_deterministic else None,
         )
-        
-        # Cache the response if caching is enabled and response is not streaming
         if use_deterministic and isinstance(response, str):
             self.cache_manager.set_response_cache(rewritten_query, response, use_deterministic=True)
-
         return response
 
 # Instantiate the singleton service
