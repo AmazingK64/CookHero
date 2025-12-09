@@ -128,6 +128,7 @@ class HowToCookDataSource(BaseDataSource):
         documents = []
         # Collect dish information for the index document
         dishes_by_category: Dict[str, List[str]] = {}
+        dishes_by_difficulty: Dict[str, List[str]] = {}
         
         for md_file in self.data_path.rglob("*.md"):
             try:
@@ -144,56 +145,104 @@ class HowToCookDataSource(BaseDataSource):
                 self._enhance_metadata(doc)
                 documents.append(doc)
                 
-                # Collect dish name and category for index
+                # Collect dish name, category and difficulty for index
                 dish_name = doc.metadata.get('dish_name', md_file.stem)
                 category = doc.metadata.get('category', '其他')
-                if category not in dishes_by_category:
-                    dishes_by_category[category] = []
-                dishes_by_category[category].append(dish_name)
+                difficulty = doc.metadata.get('difficulty', '未知')
+
+                dishes_by_category.setdefault(category, []).append(dish_name)
+                dishes_by_difficulty.setdefault(difficulty, []).append(dish_name)
             except Exception as e:
                 logger.warning(f"Failed to read file {md_file}: {e}")
         
-        # Create a dish index document containing all dish names organized by category
-        index_doc = self._create_dish_index_document(dishes_by_category)
-        if index_doc:
-            documents.append(index_doc)
-            logger.info(f"Created dish index document with {sum(len(dishes) for dishes in dishes_by_category.values())} dishes across {len(dishes_by_category)} categories")
+        # Create multiple dish index documents:
+        #  - one overall index
+        #  - one index per category
+        #  - one index per difficulty
+        index_docs = []
+        overall_index = self._create_dish_index_document(
+            dishes_by_category=dishes_by_category,
+            dishes_by_difficulty=dishes_by_difficulty,
+        )
+        if overall_index:
+            index_docs.append(overall_index)
+
+        # category-level index docs
+        for category, names in dishes_by_category.items():
+            doc = self._create_single_index_doc(
+                key_type="category",
+                key_value=category,
+                dish_list=sorted(set(names))
+            )
+            if doc:
+                index_docs.append(doc)
+
+        # difficulty-level index docs
+        for difficulty, names in dishes_by_difficulty.items():
+            doc = self._create_single_index_doc(
+                key_type="difficulty",
+                key_value=difficulty,
+                dish_list=sorted(set(names))
+            )
+            if doc:
+                index_docs.append(doc)
+
+        for idx in index_docs:
+            documents.append(idx)
+        logger.info(f"Created {len(index_docs)} dish index documents (overall + per-metadata indices)")
         
         return documents
     
-    def _create_dish_index_document(self, dishes_by_category: Dict[str, List[str]]) -> Document:
+    def _create_dish_index_document(
+        self,
+        dishes_by_category: Dict[str, List[str]],
+        dishes_by_difficulty: Dict[str, List[str]],
+    ) -> Document:
         """
-        Creates a special index document containing all dish names organized by category.
-        This document will be used for recommendation queries.
+        Creates a special index document containing all dish names organized by
+        multiple metadata axes: category, dish_name and difficulty. This document
+        will be used for recommendation queries and will also carry metadata keys
+        that _create_index_chunk_content expects (e.g. 'categories', 'total_dishes').
         """
-        
-        # Build the index content
+
+        # Build the index content with multiple sections
         content_parts = ["# 菜谱索引\n\n"]
-        content_parts.append("本索引包含所有可用的菜谱名称，按类别组织。\n\n")
-        
+        content_parts.append("本索引包含所有可用的菜谱名称，按多种元数据组织（类别、菜名、难度）。\n\n")
+
         # Add dishes by category
+        content_parts.append("## 按类别分类\n\n")
         for category in sorted(dishes_by_category.keys()):
-            dishes = sorted(dishes_by_category[category])
-            content_parts.append(f"## {category}\n\n")
-            content_parts.append("推荐菜，菜谱列表，")
-            content_parts.append(f"{category}推荐：")
+            dishes = sorted(set(dishes_by_category[category]))
+            content_parts.append(f"### {category}\n\n")
+            content_parts.append("菜谱列表：")
             content_parts.append("、".join(dishes))
             content_parts.append("\n\n")
-        
-        # Add a summary section
+
+        # Add dishes by difficulty
+        content_parts.append("## 按难度分类\n\n")
+        for diff in sorted(dishes_by_difficulty.keys()):
+            dishes = sorted(set(dishes_by_difficulty[diff]))
+            content_parts.append(f"### {diff}\n\n")
+            content_parts.append("菜谱列表：")
+            content_parts.append("、".join(dishes))
+            content_parts.append("\n\n")
+
+        # Add a global summary section
         content_parts.append("## 所有菜谱\n\n")
+
         all_dishes = []
         for dishes in dishes_by_category.values():
             all_dishes.extend(dishes)
+        unique_all = sorted(set(all_dishes))
         content_parts.append("推荐菜，菜谱列表，所有菜谱：")
-        content_parts.append("、".join(sorted(all_dishes)))
+        content_parts.append("、".join(unique_all))
         content_parts.append("\n")
-        
+
         index_content = "".join(content_parts)
-        
+
         # Generate a special ID for the index document
         index_id = str(uuid.uuid5(DOC_NAMESPACE, "dish_index"))
-        
+
         index_doc = Document(
             id=index_id,
             page_content=index_content,
@@ -203,9 +252,56 @@ class HowToCookDataSource(BaseDataSource):
                 "dish_name": "菜谱索引",
                 "category": "索引",
                 "difficulty": "未知",
+                # Mark as index so _create_child_chunks creates recommendation chunk
+                "is_dish_index": True,
+                # Metadata helpers for index chunk generation
+                "categories": sorted(list(dishes_by_category.keys())),
+                "total_dishes": len(unique_all),
+                "difficulties": sorted(list(dishes_by_difficulty.keys())),
             }
         )
-        
+
+        return index_doc
+
+    def _create_single_index_doc(self, key_type: str, key_value: str, dish_list: List[str]) -> Document:
+        """
+        Create a single index document for a specific metadata value.
+        key_type: one of 'category', 'difficulty', 'dish_name'
+        key_value: the value for that key (e.g. '甜品')
+        dish_list: list of dish names belonging to this key
+        """
+
+        title = f"菜谱索引 - {key_value}"
+        content = "、".join(dish_list)
+
+        metadata = {
+            "source": "dish_index",
+            "parent_id": None,
+            # By default mark dish_name as the index label, category/difficulty set accordingly
+            "dish_name": "菜谱索引",
+            "category": "索引",
+            "difficulty": "未知",
+            "is_dish_index": True,
+            # helpers
+            "total_dishes": len(dish_list),
+        }
+
+        if key_type == "category":
+            metadata["category"] = key_value
+        elif key_type == "difficulty":
+            metadata["difficulty"] = key_value
+
+        # include the index label in the content header for clarity
+        index_content = f"{title}\n\n" + content
+
+        index_id = str(uuid.uuid5(DOC_NAMESPACE, f"dish_index::{key_type}::{key_value}"))
+
+        index_doc = Document(
+            id=index_id,
+            page_content=index_content,
+            metadata=metadata
+        )
+
         return index_doc
 
     def _enhance_metadata(self, doc: Document):
@@ -258,7 +354,6 @@ class HowToCookDataSource(BaseDataSource):
                     if key not in index_chunk.metadata:
                         index_chunk.metadata[key] = ""
                 all_chunks.append(index_chunk)
-                logger.info("Created recommendation-focused chunk for dish index document")
             else:
                 # Regular documents: split into chunks
                 md_chunks = markdown_splitter.split_text(doc.page_content)
@@ -283,20 +378,26 @@ class HowToCookDataSource(BaseDataSource):
         """
         categories = index_metadata.get("categories", [])
         total_dishes = index_metadata.get("total_dishes", 0)
-        
+
         content_parts = []
-        content_parts.append("推荐菜，菜谱列表，荤素搭配，搭配合理，营养均衡，健康饮食，家常菜，菜品，食谱，")
-        
-        # Add category-specific recommendation keywords
-        for category in sorted(categories):
-            content_parts.append(f"{category}推荐，")
-        
+        # Base recommendation keywords
+        content_parts.append("推荐菜,菜谱列表,菜品,食谱")
+
+        # If this index doc targets a single category, include that category keyword
+        if index_metadata.get("category") and index_metadata.get("category") != "索引":
+            content_parts.append(f"{index_metadata.get('category')}推荐，")
+        else:
+            # Add category-specific recommendation keywords when categories list present
+            for category in sorted(categories):
+                content_parts.append(f"{category}推荐，")
+
+        # If this index doc targets a difficulty, add difficulty keyword
+        if index_metadata.get("difficulty") and index_metadata.get("difficulty") != "未知":
+            content_parts.append(f"{index_metadata.get('difficulty')}难度推荐，")
+
         # Add general recommendation keywords
-        content_parts.append("家常菜推荐，")
-        content_parts.append("菜品推荐，")
-        content_parts.append("食谱推荐，")
         content_parts.append(f"共有{total_dishes}道菜谱可供推荐")
-        
+
         return "".join(content_parts)
 
     def _save_debug_files(self, parent_docs: List[Document], child_chunks: List[Document]):
