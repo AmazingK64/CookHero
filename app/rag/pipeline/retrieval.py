@@ -129,21 +129,20 @@ class RetrievalOptimizationModule:
         query_lower = query.lower()
         
         # Keyword-heavy queries (with specific terms) → favor BM25
-        keyword_indicators = ["怎么做", "如何", "步骤", "方法", "做法", "recipe", "how to", "步骤"]
+        keyword_indicators = ["怎么做", "如何", "步骤", "方法", "做法", "recipe", "how to"]
         if any(indicator in query_lower for indicator in keyword_indicators):
             logger.info(f"Query contains keyword indicators, using weighted ranker with BM25 bias")
-            return "weighted", [0.8, 0.2]  # Favor sparse/BM25
+            return "weighted", [0.3, 0.7]  # Favor sparse/BM25
         
         # Semantic/conceptual queries → favor dense embeddings
         # Expanded indicators to include recommendation queries
         semantic_indicators = [
             "推荐", "类似", "什么菜", "有哪些", "有什么", "适合", "建议", 
             "recommend", "similar", "suggest", "what", "which",
-            "搭配", "组合", "家常菜", "菜品", "菜肴"
         ]
         if any(indicator in query_lower for indicator in semantic_indicators):
             logger.info(f"Query contains semantic indicators, using weighted ranker with dense bias")
-            return "weighted", [1, 0]  # Favor dense/semantic
+            return "weighted", [0.6, 0.4]  # Favor dense/semantic
         
         # Balanced queries
         return "weighted", [0.5, 0.5]
