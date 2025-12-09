@@ -166,8 +166,6 @@ class HowToCookDataSource(BaseDataSource):
         Creates a special index document containing all dish names organized by category.
         This document will be used for recommendation queries.
         """
-        if not dishes_by_category:
-            return None
         
         # Build the index content
         content_parts = ["# 菜谱索引\n\n"]

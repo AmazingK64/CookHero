@@ -61,7 +61,7 @@ class GenerationIntegrationModule:
         return ChatOpenAI(
             model=self.model_name,
             temperature=0.0,
-            max_tokens=self.max_tokens,  # reuse max_tokens; rewriting is short
+            max_tokens=self.max_tokens,  # type: ignore
             api_key=self.api_key,
             base_url=self.base_url or None
         )
