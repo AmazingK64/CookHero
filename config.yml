@@ -25,7 +25,7 @@ llm:
   # Optional base URL for self-hosted or proxy endpoints
   base_url: "https://api.siliconflow.cn/v1"
   # Generation parameters
-  temperature: 0
+  temperature: 1
   max_tokens: 131072
 
 retrieval:
@@ -34,7 +34,7 @@ retrieval:
   # RRF k parameter (deprecated, kept for backward compatibility)
   rrf_k: 60
   # Minimum score threshold for filtering low-quality results (0.0 = no filtering)
-  score_threshold: 0.1
+  score_threshold: 0.2
   # Ranker type: "rrf" (Reciprocal Rank Fusion) or "weighted" (weighted combination)
   ranker_type: "weighted"
   # Weights for [dense_vector, sparse_bm25] when using weighted ranker
@@ -64,8 +64,8 @@ cache:
   # Cache TTL (time-to-live) in seconds
   # Note: retrieval_ttl should be longer than response_ttl so that even when
   # responses expire, retrieval results can still be reused for faster regeneration
-  retrieval_ttl: 3600  # 1 hour for retrieval results (documents change infrequently)
-  response_ttl: 1800   # 30 minutes for query responses (users may want varied responses)
+  retrieval_ttl: 600  # 1 hour for retrieval results (documents change infrequently)
+  response_ttl: 300   # 30 minutes for query responses (users may want varied responses)
   # L2 semantic cache settings
   l2_enabled: true
   similarity_threshold: 0.8  # Minimum similarity for L2 cache matching (0-1)
