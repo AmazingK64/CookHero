@@ -90,23 +90,6 @@ class RAGService:
 
         self._initialized = True
         logger.info("RAGService initialized successfully with multiple knowledge bases.")
-    
-    def _is_recommendation_query(self, query: str) -> bool:
-        """
-        Detects if a query is a recommendation query that needs more diverse results.
-        
-        Args:
-            query: The rewritten query string.
-            
-        Returns:
-            True if this is a recommendation query, False otherwise.
-        """
-        query_lower = query.lower()
-        recommendation_keywords = [
-            "推荐", "有哪些", "有什么", "适合", "建议", "搭配", "组合",
-            "recommend", "what", "which", "suggest", "suitable"
-        ]
-        return any(keyword in query_lower for keyword in recommendation_keywords)
 
     def _load_knowledge_bases(self):
         """
@@ -205,7 +188,14 @@ class RAGService:
     # --- Helper methods ---
 
     def _rewrite_query(self, query: str) -> str:
-        return self.generation_module.rewrite_query(query)
+        rewritten = self.generation_module.rewrite_query(query)
+        # If the LLM rewrote the query, append the original query after it
+        # so downstream components (and users) can see both forms.
+        # if rewritten and rewritten != query:
+        #     combined = f"{rewritten}\n\n原始问题: {query}"
+        #     logger.info(f"Returning rewritten query with original appended: '{combined}'")
+        #     return combined
+        return rewritten
 
     def _maybe_return_cached_response(self, rewritten_query: str):
         if not self.cache_manager:
