@@ -179,10 +179,9 @@ class RAGService:
             metadata_filters,
         )
 
-        processed_docs = self._post_process(all_retrieved_docs)
-        docs_for_rerank = self._select_for_rerank(processed_docs, retrieval_top_k)
-        final_docs = self._rerank_if_needed(rewritten_query, docs_for_rerank)
-        context_parts = self._build_context(final_docs)
+        final_docs = self._rerank_if_needed(rewritten_query, all_retrieved_docs)
+        processed_docs = self._post_process(final_docs)
+        context_parts = self._build_context(processed_docs)
         return self._generate_and_cache_response(rewritten_query, context_parts, stream)
 
     # --- Helper methods ---
@@ -289,19 +288,6 @@ class RAGService:
             reverse=True,
         )
         return unique_processed_docs
-
-    def _select_for_rerank(self, processed_docs, retrieval_top_k: int):
-        top_k_before_rerank = retrieval_top_k
-        docs_for_rerank = processed_docs[:top_k_before_rerank]
-        if docs_for_rerank:
-            logger.info(
-                f"Selected top {len(docs_for_rerank)} documents (score range: "
-                f"{docs_for_rerank[-1].metadata.get('retrieval_score', 0.0):.4f} - "
-                f"{docs_for_rerank[0].metadata.get('retrieval_score', 0.0):.4f}) for reranking"
-            )
-        else:
-            logger.warning("No documents selected for reranking after post-processing and sorting.")
-        return docs_for_rerank
 
     def _rerank_if_needed(self, rewritten_query: str, docs_for_rerank):
         if self.reranker and self.config.reranker.enabled:
