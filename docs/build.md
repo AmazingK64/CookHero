@@ -1,53 +1,222 @@
-# CookHero 构建与开发指南
+# 构建指南
 
-本文档为开发者提供清晰的指南，说明如何配置开发环境、构建和运行 CookHero 项目。
+## 前置要求
 
----
+### 系统要求
+- **操作系统**: macOS, Linux, Windows (推荐使用 WSL2)
+- **Python**: 3.8 或更高版本
+- **Docker**: 20.10 或更高版本 (用于部署)
+- **内存**: 至少 8GB RAM
+- **磁盘空间**: 至少 10GB 可用空间
 
-## 1. 环境与配置
+### 依赖版本
+- **Milvus**: v2.5.14
+- **Redis**: Alpine 最新版
+- **MinIO**: RELEASE.2023-03-20T20-16-18Z
+- **etcd**: v3.5.16
 
-### 1.1. 环境准备 (Prerequisites)
+## 安装步骤
 
-在开始之前，请确保您的开发环境中已安装以下工具：
+### 1. 克隆仓库
+```bash
+git clone https://github.com/Decade-qiu/CookHero.git
+cd CookHero
+```
 
-- **Python**: 版本 `3.9` 或更高。请通过 `python --version` 或 `python3 --version` 命令确认。
-- **Docker** 与 **Docker Compose**: 用于快速启动 Milvus 向量数据库等依赖服务。
-- **Git**: 用于版本控制和克隆项目知识库数据。
+### 2. 安装 Python 依赖
+```bash
+# 创建虚拟环境 (推荐)
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+# 或 venv\Scripts\activate  # Windows
 
-### 1.2. 配置文件说明
+# 安装依赖
+pip install -r requirements.txt
+```
 
-CookHero 采用 **`config.yml`** 作为唯一的中心配置文件，并结合 **`.env`** 文件来管理敏感凭证。
+### 3. 配置环境变量
+创建 `.env` 文件并配置必要的 API 密钥:
+```bash
+# .env 文件内容示例
+SILICONFLOW_API_KEY=your_api_key_here
+REDIS_PASSWORD=your_redis_password  # 如果需要
+```
 
-- **`config.yml`**: 包含了所有应用程序的配置项，如模型名称、检索参数、数据源路径等。你可以直接修改此文件来调整系统行为。
+### 4. 启动基础设施服务
+使用 Docker Compose 启动 Milvus, Redis, MinIO, etcd:
+```bash
+cd deployments
+docker-compose up -d
+```
 
-- **`.env` 文件**: 用于存储敏感数据，主要是第三方服务的 API 密钥。在项目根目录下创建一个 `.env` 文件，并至少填入以下内容：
-    
-    ```dotenv
-    LLM_API_KEY="your-llm-api-key"
-    # 如果 Embedding 模型或 Reranker 模型使用独立的 key，也在此处添加
-    # EMBEDDING_API_KEY="your-embedding-api-key"
-    # RERANKER_API_KEY="your-reranker-api-key"
-    ```
-    `config_loader.py` 会在程序启动时自动加载此文件，并将密钥安全地注入到配置中。
+等待所有服务启动完成 (大约 2-3 分钟):
+```bash
+# 检查服务状态
+docker-compose ps
+```
 
-**重要提示**: `.env` 文件已被添加到 `.gitignore` 中，请勿将其提交到版本控制系统。
+### 5. 数据摄取
+运行数据摄取脚本来构建向量索引:
+```bash
+cd scripts
+python run_ingestion.py
+```
 
-```markdown
-# CookHero 构建与开发指南
+此过程可能需要几分钟到几十分钟，取决于数据量。
 
-本文档为开发者提供清晰的指南，说明如何配置开发环境、构建和运行 CookHero 项目。
+## 构建与运行
 
----
+### 开发环境
 
-## 1. 环境与配置
+#### 启动后端服务
+```bash
+cd app
+python main.py
+```
 
-### 1.1. 环境准备 (Prerequisites)
+服务将在 `http://localhost:8000` 启动。
 
-在本项目中建议使用以下环境：
+#### API 文档
+访问 `http://localhost:8000/docs` 查看交互式 API 文档。
 
-- **Python**: 3.9 或更高（推荐 3.11+）。通过 `python --version` 确认。
-- **Docker** 与 **Docker Compose**: 用于本地启动 Milvus、Redis、MinIO 等依赖。
-- **Git**: 管理仓库和同步知识库数据。
+#### 测试服务
+```bash
+cd tests
+python test_rag.py
+```
+
+### 生产环境
+
+#### 使用 Docker Compose 部署
+```bash
+cd deployments
+docker-compose -f docker-compose.prod.yml up -d  # 如果有生产配置文件
+```
+
+#### 直接运行
+```bash
+# 设置生产环境变量
+export ENVIRONMENT=production
+
+# 启动服务
+python app/main.py
+```
+
+### 测试
+
+#### 单元测试
+```bash
+pytest tests/
+```
+
+#### 集成测试
+```bash
+# 确保所有服务运行
+python tests/test_rag.py
+```
+
+#### 性能测试
+```bash
+# 使用工具如 locust 或 artillery 进行负载测试
+# 示例: 测试并发查询
+ab -n 100 -c 10 http://localhost:8000/api/v1/chat
+```
+
+## 故障排除
+
+### 常见问题
+
+#### 1. Milvus 连接失败
+**错误**: `Connection to Milvus failed`
+**解决方案**:
+- 检查 Docker 服务是否运行: `docker-compose ps`
+- 确认端口映射: `netstat -tlnp | grep 19530`
+- 重启 Milvus 服务: `docker-compose restart milvus`
+
+#### 2. Redis 缓存问题
+**错误**: `Redis connection error`
+**解决方案**:
+- 检查 Redis 服务: `docker-compose logs redis`
+- 验证密码配置是否正确
+- 确认端口 6379 未被占用
+
+#### 3. 数据摄取失败
+**错误**: `Ingestion failed for source X`
+**解决方案**:
+- 检查数据文件是否存在: `ls -la data/HowToCook/`
+- 验证配置文件: `cat config.yml`
+- 查看详细日志: `python scripts/run_ingestion.py 2>&1 | tee ingestion.log`
+
+#### 4. API 密钥问题
+**错误**: `Authentication failed`
+**解决方案**:
+- 检查 `.env` 文件中的 API 密钥
+- 确认 SiliconFlow API 额度充足
+- 验证网络连接到 `api.siliconflow.cn`
+
+#### 5. 内存不足
+**错误**: `Out of memory` 或服务崩溃
+**解决方案**:
+- 增加 Docker 内存限制
+- 减少 `config.yml` 中的 `top_k` 值
+- 使用更小的 embedding 模型
+
+#### 6. 向量搜索无结果
+**问题**: 查询返回空结果
+**解决方案**:
+- 检查向量索引是否正确构建
+- 降低 `score_threshold` 配置
+- 验证查询文本质量
+
+### 调试技巧
+
+#### 查看服务日志
+```bash
+# 基础设施服务日志
+docker-compose logs -f
+
+# 应用日志
+tail -f app.log
+```
+
+#### 检查系统资源
+```bash
+# CPU 和内存使用
+top
+
+# 磁盘空间
+df -h
+
+# Docker 资源使用
+docker stats
+```
+
+#### 重置系统
+```bash
+# 停止所有服务
+docker-compose down
+
+# 清理数据卷 (警告: 会删除所有数据)
+docker-compose down -v
+
+# 重新启动
+docker-compose up -d
+python scripts/run_ingestion.py
+```
+
+### 性能优化
+
+- **缓存调优**: 调整 `config.yml` 中的 TTL 值
+- **检索参数**: 优化 `top_k` 和 `score_threshold`
+- **模型选择**: 使用更快的 embedding 模型
+- **并发配置**: 调整 FastAPI worker 数量
+
+### 获取帮助
+
+如果问题持续存在:
+1. 查看 GitHub Issues: https://github.com/Decade-qiu/CookHero/issues
+2. 检查 README.md 中的详细文档
+3. 提供完整的错误日志和系统信息
 
 可选但推荐：`poetry` 或 `pip-tools` 用于依赖管理与可重复构建。
 
