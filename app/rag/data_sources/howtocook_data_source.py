@@ -129,6 +129,7 @@ class HowToCookDataSource(BaseDataSource):
         # Collect dish information for the index document
         dishes_by_category: Dict[str, List[str]] = {}
         dishes_by_difficulty: Dict[str, List[str]] = {}
+        dishes_by_mixed: Dict[Tuple[str, str], List[str]] = {}
         
         for md_file in self.data_path.rglob("*.md"):
             try:
@@ -152,6 +153,7 @@ class HowToCookDataSource(BaseDataSource):
 
                 dishes_by_category.setdefault(category, []).append(dish_name)
                 dishes_by_difficulty.setdefault(difficulty, []).append(dish_name)
+                dishes_by_mixed.setdefault((category, difficulty), []).append(dish_name)
             except Exception as e:
                 logger.warning(f"Failed to read file {md_file}: {e}")
         
@@ -159,6 +161,7 @@ class HowToCookDataSource(BaseDataSource):
         #  - one overall index
         #  - one index per category
         #  - one index per difficulty
+        #  - one index per (category, difficulty) combination
         index_docs = []
         overall_index = self._create_dish_index_document(
             dishes_by_category=dishes_by_category,
@@ -182,6 +185,16 @@ class HowToCookDataSource(BaseDataSource):
             doc = self._create_single_index_doc(
                 key_type="difficulty",
                 key_value=difficulty,
+                dish_list=sorted(set(names))
+            )
+            if doc:
+                index_docs.append(doc)
+
+        # (category, difficulty)-level index docs
+        for (category, difficulty), names in dishes_by_mixed.items():
+            doc = self._create_single_index_doc(
+                key_type="category_difficulty",
+                key_value=f"{category}::{difficulty}",
                 dish_list=sorted(set(names))
             )
             if doc:
@@ -275,7 +288,7 @@ class HowToCookDataSource(BaseDataSource):
         content = "、".join(dish_list)
 
         metadata = {
-            "source": "dish_index",
+            "source": key_type,
             "parent_id": None,
             # By default mark dish_name as the index label, category/difficulty set accordingly
             "dish_name": "菜谱索引",
@@ -290,7 +303,10 @@ class HowToCookDataSource(BaseDataSource):
             metadata["category"] = key_value
         elif key_type == "difficulty":
             metadata["difficulty"] = key_value
-
+        elif key_type == "category_difficulty":
+            category, difficulty = key_value.split("::")
+            metadata["category"] = category
+            metadata["difficulty"] = difficulty
         # include the index label in the content header for clarity
         index_content = f"{title}\n\n" + content
 
@@ -376,26 +392,22 @@ class HowToCookDataSource(BaseDataSource):
         without including actual dish names. This improves semantic matching for 
         recommendation queries.
         """
-        categories = index_metadata.get("categories", [])
-        total_dishes = index_metadata.get("total_dishes", 0)
 
         content_parts = []
         # Base recommendation keywords
-        content_parts.append("推荐菜,菜谱列表,菜品,食谱")
+        content_parts.append("推荐菜,菜谱列表,菜品,食谱,有哪些菜品推荐")
 
         # If this index doc targets a single category, include that category keyword
-        if index_metadata.get("category") and index_metadata.get("category") != "索引":
+        if index_metadata.get("source") == "category":
             content_parts.append(f"{index_metadata.get('category')}推荐，")
-        else:
-            # Add category-specific recommendation keywords when categories list present
-            for category in sorted(categories):
-                content_parts.append(f"{category}推荐，")
-
-        # If this index doc targets a difficulty, add difficulty keyword
-        if index_metadata.get("difficulty") and index_metadata.get("difficulty") != "未知":
+        elif index_metadata.get("source") == "difficulty":
+            content_parts.append(f"{index_metadata.get('difficulty')}难度推荐，")
+        elif index_metadata.get("source") == "category_difficulty":
+            content_parts.append(f"{index_metadata.get('category')}类别，")
             content_parts.append(f"{index_metadata.get('difficulty')}难度推荐，")
 
         # Add general recommendation keywords
+        total_dishes = index_metadata.get("total_dishes", 0)
         content_parts.append(f"共有{total_dishes}道菜谱可供推荐")
 
         return "".join(content_parts)
