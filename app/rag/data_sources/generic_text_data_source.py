@@ -45,11 +45,15 @@ class GenericTextDataSource(BaseDataSource):
 
     def post_process_retrieval(self, retrieved_chunks: List[Document]) -> List[Document]:
         """
-        For sentence window indexing, the retrieved chunks (sentences) are what we need.
-        The actual context assembly happens in the RAGService using the 'window' metadata.
-        This method can simply return the chunks as is.
+        For sentence window indexing, the retrieved chunks are original text segments.
+        But we need to expand them back to window-sized chunks for better context.
+        In the created chunks, the 'source' metadata holds the window text.
         """
-        return retrieved_chunks
+        window_text_docs = []
+        for chunk in retrieved_chunks:
+            chunk.page_content = chunk.metadata.get("source", chunk.page_content)
+            window_text_docs.append(chunk)
+        return window_text_docs
 
     def _load_parent_documents(self) -> List[Document]:
         documents: List[Document] = []
@@ -104,11 +108,11 @@ class GenericTextDataSource(BaseDataSource):
             nodes = parser.get_nodes_from_documents([llama_doc])
 
             for node in nodes:
-                window_text = node.metadata.get("window") or node.get_content()
                 chunk_metadata = self._clone_metadata(doc.metadata, parent_id=doc.id)
+                chunk_metadata.update({"source": node.metadata.get("window", node.get_content())})
                 chunk = self._create_document(
                     doc_id=str(uuid.uuid4()),
-                    page_content=window_text,
+                    page_content=node.get_content(),
                     metadata=chunk_metadata,
                 )
                 all_chunks.append(chunk)

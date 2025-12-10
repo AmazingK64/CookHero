@@ -95,13 +95,6 @@ class RetrievalOptimizationModule:
         
         logger.info(f"Retrieved {len(docs)} documents from hybrid search (before filtering)")
         
-        # Log each document with its score
-        for i, (doc, score) in enumerate(zip(docs, scores)):
-            logger.info("=" * 60)
-            logger.info(f"Rank #{i+1} | Score: {score:.4f} | Doc ID: {doc.id}")
-            logger.info(f"Metadata: {doc.metadata}")
-            logger.info(f"Content preview: {doc.page_content[:10]}...")
-        
         # Apply score threshold filtering
         if score_threshold > 0 and ranker_type == "weighted":
             filtered_results = [(doc, score) for doc, score in zip(docs, scores) if score >= score_threshold]
