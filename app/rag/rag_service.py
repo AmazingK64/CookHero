@@ -249,7 +249,14 @@ class RAGService:
                 continue
             
             for doc, score in zip(retrieved_docs, retrieved_scores):
-                doc.metadata['data_source'] = name
+                existing_source = doc.metadata.get('data_source')
+                if existing_source and existing_source != name:
+                    logger.warning(
+                        "Data source mismatch detected (metadata=%s, expected=%s). Overriding.",
+                        existing_source,
+                        name,
+                    )
+                doc.metadata['data_source'] = existing_source or name
                 doc.metadata['retrieval_score'] = score
             all_retrieved_docs.extend(retrieved_docs)
 
@@ -296,14 +303,7 @@ class RAGService:
         return docs_for_rerank
 
     def _build_context(self, final_docs):
-        context_parts = []
-        for doc in final_docs:
-            source_name = doc.metadata.get('data_source')
-            if source_name == 'generic_text' and 'window' in doc.metadata:
-                context_parts.append(doc.metadata['window'])
-            else:
-                context_parts.append(doc.page_content)
-        return context_parts
+        return [doc.page_content for doc in final_docs]
 
     def _generate_and_cache_response(self, rewritten_query: str, context_parts, stream: bool):
         response = self.generation_module.generate_response(
