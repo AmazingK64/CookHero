@@ -14,6 +14,13 @@ from app.rag.vector_stores.vector_store_factory import get_vector_store
 from app.rag.pipeline.retrieval import RetrievalOptimizationModule
 from app.rag.pipeline.generation import GenerationIntegrationModule
 from app.rag.pipeline.metadata_filter import MetadataFilterExtractor
+from app.rag.pipeline.workflow import (
+    ContextBuilder,
+    DocumentPostProcessor,
+    QueryPlanner,
+    RetrievalExecutor,
+    ResponseGenerator,
+)
 from app.rag.rerankers.base import BaseReranker
 from app.rag.cache import CacheManager
 
@@ -87,6 +94,22 @@ class RAGService:
             logger.info("Cache manager initialized.")
         else:
             logger.info("Caching is disabled.")
+
+        self._query_planner = QueryPlanner(
+            generation_module=self.generation_module,
+            metadata_filter_extractor=self.metadata_filter_extractor,
+            cache_manager=self.cache_manager,
+        )
+        self._retrieval_executor = RetrievalExecutor(
+            retrieval_modules=self.retrieval_modules,
+            cache_manager=self.cache_manager,
+        )
+        self._post_processor = DocumentPostProcessor(self.data_sources)
+        self._context_builder = ContextBuilder()
+        self._response_generator = ResponseGenerator(
+            generation_module=self.generation_module,
+            cache_manager=self.cache_manager,
+        )
 
         self._initialized = True
         logger.info("RAGService initialized successfully with multiple knowledge bases.")
@@ -162,155 +185,30 @@ class RAGService:
         if not all([self.retrieval_modules, self.generation_module, self.data_sources]):
             raise RuntimeError("RAG Service is not properly initialized.")
 
-        rewritten_query = self._rewrite_query(query)
-        metadata_expression = self.metadata_filter_extractor.build_filter_expression(
-            query,
-            self.metadata_catalog
-        )
-        cached = self._maybe_return_cached_response(rewritten_query)
-        if cached is not None:
-            return cached
+        plan = self._query_planner.prepare(query, self.metadata_catalog)
+        if plan.cached_response is not None:
+            return plan.cached_response
 
         retrieval_top_k = self.config.retrieval.top_k
-        all_retrieved_docs = self._retrieve_from_all_sources(
-            rewritten_query,
+        all_retrieved_docs = self._retrieval_executor.retrieve(
+            plan.rewritten_query,
             retrieval_top_k,
             use_intelligent_ranker,
-            metadata_expression,
+            plan.metadata_expression,
         )
 
-        final_docs = self._rerank_if_needed(rewritten_query, all_retrieved_docs)
-        processed_docs = self._post_process(final_docs)
-        context_parts = self._build_context(processed_docs)
-        return self._generate_and_cache_response(rewritten_query, context_parts, stream)
+        reranked_docs = self._rerank_if_needed(plan.rewritten_query, all_retrieved_docs)
+        processed_docs = self._post_processor.process(reranked_docs)
+        context_parts = self._context_builder.build(processed_docs)
+        return self._response_generator.generate(plan.rewritten_query, context_parts, stream)
 
     # --- Helper methods ---
-
-    def _rewrite_query(self, query: str) -> str:
-        rewritten = self.generation_module.rewrite_query(query)
-        # If the LLM rewrote the query, append the original query after it
-        # so downstream components (and users) can see both forms.
-        # if rewritten and rewritten != query:
-        #     combined = f"{rewritten}\n\n原始问题: {query}"
-        #     logger.info(f"Returning rewritten query with original appended: '{combined}'")
-        #     return combined
-        return rewritten
-
-    def _maybe_return_cached_response(self, rewritten_query: str):
-        if not self.cache_manager:
-            return None
-        cached_response = self.cache_manager.get_response_cache(rewritten_query)
-        if cached_response:
-            logger.info("Returning cached response")
-            return cached_response
-        return None
-
-    def _retrieve_from_all_sources(
-        self,
-        rewritten_query: str,
-        retrieval_top_k: int,
-        use_intelligent_ranker: bool,
-        metadata_expression: str | None,
-    ):
-        logger.info("--- Starting parallel retrieval from all data sources ---")
-        all_retrieved_docs = []
-        for name, retrieval_module in self.retrieval_modules.items():
-            logger.info(f"Retrieving from source: {name}")
-            # Filter metadata_filters to only include keys that exist in this source's catalog
-            # If metadata filters exist, bypass cached retrieval (cache key未区分过滤条件)
-            cached_docs = None if metadata_expression else (self.cache_manager.get_retrieval_cache(name, rewritten_query) if self.cache_manager else None)
-
-            if cached_docs:
-                logger.info(f"Using cached retrieval results for source '{name}': {len(cached_docs)} documents")
-                for doc in cached_docs:
-                    if 'retrieval_score' not in doc.metadata:
-                        doc.metadata['retrieval_score'] = 1.0
-                    doc.metadata['data_source'] = name
-                all_retrieved_docs.extend(cached_docs)
-                continue
-
-            ranker_type = ranker_weights = None
-            if use_intelligent_ranker:
-                ranker_type, ranker_weights = retrieval_module.intelligent_ranker_selection(rewritten_query)
-
-            try:
-                retrieved_docs, retrieved_scores = retrieval_module.hybrid_search(
-                    rewritten_query,
-                    top_k=retrieval_top_k,
-                    ranker_type=ranker_type,
-                    ranker_weights=ranker_weights,
-                    expr=metadata_expression,
-                )
-            except Exception as e:
-                logger.error(f"Error during retrieval from source '{name}': {e}")
-                continue
-            
-            for doc, score in zip(retrieved_docs, retrieved_scores):
-                existing_source = doc.metadata.get('data_source')
-                if existing_source and existing_source != name:
-                    logger.warning(
-                        "Data source mismatch detected (metadata=%s, expected=%s). Overriding.",
-                        existing_source,
-                        name,
-                    )
-                doc.metadata['data_source'] = existing_source or name
-                doc.metadata['retrieval_score'] = score
-            all_retrieved_docs.extend(retrieved_docs)
-
-            if self.cache_manager:
-                self.cache_manager.set_retrieval_cache(name, rewritten_query, retrieved_docs)
-
-        logger.info(f"--- Aggregated {len(all_retrieved_docs)} documents from all sources ---")
-        return all_retrieved_docs
-
-    def _post_process(self, all_retrieved_docs):
-        processed_docs = []
-        docs_by_source = {}
-        for doc in all_retrieved_docs:
-            source_name = doc.metadata.get('data_source')
-            docs_by_source.setdefault(source_name, []).append(doc)
-
-        for source_name, docs in docs_by_source.items():
-            data_source = self.data_sources[source_name]
-            processed_docs.extend(data_source.post_process_retrieval(docs))
-
-        unique_processed_docs_dict = {}
-        for doc in processed_docs:
-            content_key = doc.page_content
-            current_score = doc.metadata.get('retrieval_score', 0.0)
-            if content_key not in unique_processed_docs_dict:
-                unique_processed_docs_dict[content_key] = doc
-            else:
-                existing_score = unique_processed_docs_dict[content_key].metadata.get('retrieval_score', 0.0)
-                if current_score > existing_score:
-                    unique_processed_docs_dict[content_key] = doc
-
-        unique_processed_docs = list(unique_processed_docs_dict.values())
-        logger.info(f"Total unique documents after post-processing: {len(unique_processed_docs)}")
-        unique_processed_docs.sort(
-            key=lambda doc: doc.metadata.get('retrieval_score', 0.0),
-            reverse=True,
-        )
-        return unique_processed_docs
 
     def _rerank_if_needed(self, rewritten_query: str, docs_for_rerank):
         if self.reranker and self.config.reranker.enabled:
             logger.info(f"Reranking {len(docs_for_rerank)} documents...")
             return self.reranker.rerank(rewritten_query, docs_for_rerank)
         return docs_for_rerank
-
-    def _build_context(self, final_docs):
-        return [doc.page_content for doc in final_docs]
-
-    def _generate_and_cache_response(self, rewritten_query: str, context_parts, stream: bool):
-        response = self.generation_module.generate_response(
-            query=rewritten_query,
-            context_docs=context_parts,
-            stream=stream,
-        )
-        if not stream and self.cache_manager is not None and isinstance(response, str):
-            self.cache_manager.set_response_cache(rewritten_query, response)
-        return response
 
     def _build_metadata_catalog(self, chunks: list) -> Dict[str, list[str]]:
         catalog: Dict[str, set[str]] = {}
