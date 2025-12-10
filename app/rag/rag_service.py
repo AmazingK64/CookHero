@@ -163,9 +163,9 @@ class RAGService:
             raise RuntimeError("RAG Service is not properly initialized.")
 
         rewritten_query = self._rewrite_query(query)
-        metadata_filters = self.metadata_filter_extractor.extract_filters(
+        metadata_expression = self.metadata_filter_extractor.build_filter_expression(
             query,
-            self._merge_metadata_catalog()
+            self.metadata_catalog
         )
         cached = self._maybe_return_cached_response(rewritten_query)
         if cached is not None:
@@ -176,7 +176,7 @@ class RAGService:
             rewritten_query,
             retrieval_top_k,
             use_intelligent_ranker,
-            metadata_filters,
+            metadata_expression,
         )
 
         final_docs = self._rerank_if_needed(rewritten_query, all_retrieved_docs)
@@ -210,18 +210,15 @@ class RAGService:
         rewritten_query: str,
         retrieval_top_k: int,
         use_intelligent_ranker: bool,
-        metadata_filters: list,
+        metadata_expression: str | None,
     ):
         logger.info("--- Starting parallel retrieval from all data sources ---")
         all_retrieved_docs = []
-        expr = self._build_milvus_expr(
-            metadata_filters
-        )
         for name, retrieval_module in self.retrieval_modules.items():
             logger.info(f"Retrieving from source: {name}")
             # Filter metadata_filters to only include keys that exist in this source's catalog
             # If metadata filters exist, bypass cached retrieval (cache key未区分过滤条件)
-            cached_docs = None if metadata_filters else (self.cache_manager.get_retrieval_cache(name, rewritten_query) if self.cache_manager else None)
+            cached_docs = None if metadata_expression else (self.cache_manager.get_retrieval_cache(name, rewritten_query) if self.cache_manager else None)
 
             if cached_docs:
                 logger.info(f"Using cached retrieval results for source '{name}': {len(cached_docs)} documents")
@@ -242,7 +239,7 @@ class RAGService:
                     top_k=retrieval_top_k,
                     ranker_type=ranker_type,
                     ranker_weights=ranker_weights,
-                    expr=expr,
+                    expr=metadata_expression,
                 )
             except Exception as e:
                 logger.error(f"Error during retrieval from source '{name}': {e}")
@@ -327,43 +324,6 @@ class RAGService:
                 if isinstance(v, (str, int, float)):
                     catalog.setdefault(k, set()).add(str(v))
         res =  {k: sorted(list(vals)) for k, vals in catalog.items()}
-        return res
-
-    def _merge_metadata_catalog(self) -> Dict[str, list[str]]:
-        merged: Dict[str, set[str]] = {}
-        for source_catalog in self.metadata_catalog.values():
-            for k, vals in source_catalog.items():
-                merged.setdefault(k, set()).update(vals)
-        res = {k: sorted(list(vals)) for k, vals in merged.items()}
-        return res
-
-    def _build_milvus_expr(self, filters: list) -> str | None:
-        """
-        Build Milvus boolean expression from filters.
-        Example: category in ["素菜","荤菜"] and difficulty in ["简单"]
-        
-        Note: In Milvus, metadata fields are accessed directly by their field name,
-        not through a "metadata" prefix. The fields should be indexed as scalar fields.
-        """
-        if not filters:           
-            return None
-        clauses = []
-        for f in filters:
-            key = f.get("key")
-            values = f.get("values", [])
-            if not key or not values:
-                continue
-            # Escape quotes in values and wrap them
-            safe_vals = [f'"{str(v).replace(chr(34), chr(92)+chr(34))}"' for v in values]
-            if not safe_vals:
-                continue
-            # Direct field name access (not metadata["field"])
-            clause = f'{key} in [{", ".join(safe_vals)}]'
-            clauses.append(clause)
-        if not clauses:
-            return None
-        res = " and ".join(clauses)
-        logger.info(f"{'*' * 10} Built Milvus expression: {res}")
         return res
 
 # Instantiate the singleton service
