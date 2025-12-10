@@ -1,26 +1,13 @@
 # app/rag/pipeline/metadata_filter.py
 """
-LLM-driven metadata filter extraction.
-Given a user query and the available metadata schema (keys + candidate values),
-returns a small set of explicit filters that should be applied before retrieval.
-
-Output format (JSON):
-{
-  "filters": [
-    {"key": "category", "values": ["素菜", "荤菜"]},
-    {"key": "difficulty", "values": ["简单"]}
-  ]
-}
-
-Design principles:
-- Only emit filters when用户明确提及或强烈暗示（如“素菜”、“川菜”、“甜品”、“简单”）。
-- 不要因为出现模糊词就添加过滤；不确定时返回空数组。
-- 只使用提供的 metadata keys 和候选值；不要发明新的 key 或 value。
+LLM-driven metadata expression generator.
+Combines the user query, available metadata values, and Milvus reference docs
+to produce a ready-to-use boolean expression string for the vector store `expr` field.
 """
-import json
 import logging
 import re
-from typing import Dict, List, Any
+from pathlib import Path
+from typing import Dict, List
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -28,28 +15,36 @@ from langchain_core.prompts import ChatPromptTemplate
 logger = logging.getLogger(__name__)
 
 
-METADATA_FILTER_PROMPT = ChatPromptTemplate.from_template(
+FILTER_EXPRESSION_PROMPT = ChatPromptTemplate.from_template(
     """
 <|system|>
-你是一个元数据过滤提取器。根据用户查询，从给定的元数据 schema 中提取需要用于检索前过滤的键值对。
+你是一名 Milvus 数据过滤专家。请基于用户问题、可用元数据取值以及官方过滤表达式指南，
+生成一个可以直接赋值给 `expr` 的布尔表达式。只有在明确需要过滤时才输出表达式；否则返回 `NONE`。
 
-**必须遵守：**
-1. 只使用提供的 keys 与候选 values，禁止臆造。
-2. 只有当用户明确提到或强烈暗示某个值时，才添加过滤；不确定就不要过滤。
-3. 输出 JSON，格式：{{"filters": [{{"key": "...", "values": ["..."]}}]}}。无过滤时输出 {{"filters": []}}。
-4. 不要添加与查询无关的过滤条件。
-5. 同一 key 可包含多个允许值。
-6. **重要：直接返回 JSON 对象，不要包含 ```json 或其他 Markdown 标记。**
+**指引**
+1. 仅使用提供的 metadata 字段：category、dish_name、difficulty。
+2. 取值必须来自给定候选，或对字符串使用 LIKE/ILIKE 模糊匹配。
+3. 逻辑运算使用 AND/OR/NOT，必要时添加括号。
+4. 输出必须是一行纯文本表达式，禁止额外说明、前后缀或 Markdown 代码块。
+5. 如果无法确定任何过滤条件，返回 `NONE`。
+6. 在用户没有直接且明确要求有关difficulty的过滤时，尽量不要使用difficulty字段。
 
-可用元数据：
+【Milvus 过滤表达式参考】
+{reference_material}
+
+【可用元数据】
 {metadata_schema}
 
 <|user|>
-用户查询: {query}
+用户查询：{query}
 <|assistant|>
-请只返回纯 JSON 对象，不要使用代码块标记：
+请输出最终表达式或 `NONE`：
 """
 )
+
+
+REFERENCE_DIR = Path(__file__).resolve().parent / "reference"
+REFERENCE_FILES = ("boolean.md", "operators.md")
 
 
 class MetadataFilterExtractor:
@@ -57,95 +52,73 @@ class MetadataFilterExtractor:
         self.llm = ChatOpenAI(
             model=model_name,
             temperature=0,
-            max_tokens=max_tokens, # type: ignore
+            max_tokens=max_tokens,  # type: ignore
             api_key=api_key,
-            base_url=base_url or None
+            base_url=base_url or None,
         )
-    
-    def _extract_json_from_response(self, text: str) -> str:
-        """
-        Extract JSON from LLM response that may be wrapped in markdown code blocks.
-        
-        Args:
-            text: Raw LLM response text
-            
-        Returns:
-            Cleaned JSON string
-        """
-        # Remove markdown code blocks if present
-        text = text.strip()
-        
-        # Pattern 1: ```json\n{...}\n```
-        json_block_pattern = r'```(?:json)?\s*\n?(.*?)\n?```'
-        match = re.search(json_block_pattern, text, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        
-        # Pattern 2: Direct JSON (no markdown)
-        # Try to find JSON object boundaries
-        json_pattern = r'\{.*\}'
-        match = re.search(json_pattern, text, re.DOTALL)
-        if match:
-            return match.group(0).strip()
-        
-        return text.strip()
+        self.reference_material = self._load_reference_material()
 
-    def extract_filters(self, query: str, metadata_catalog: Dict[str, List[str]]) -> List[Dict[str, Any]]:
-        """
-        Use LLM to extract metadata filters.
-
-        Args:
-            query: user original query
-            metadata_catalog: mapping of key -> list of candidate values
-
-        Returns:
-            list of {"key": str, "values": List[str]}
-        """
+    def build_filter_expression(self, query: str, metadata_catalog: Dict[str, Dict[str, List[str]]]) -> str | None:
         if not metadata_catalog:
-            return []
+            return None
 
-        # Truncate candidate values to keep prompt short
-        schema_lines = []
-        for key, values in metadata_catalog.items():
-            sampled = values[:20]
-            schema_lines.append(f"- {key}: {', '.join(sampled)}")
-        schema = "\n".join(schema_lines)
-
-        prompt = METADATA_FILTER_PROMPT.format(
-            metadata_schema=schema,
-            query=query
+        metadata_schema = self._summarize_metadata(metadata_catalog)
+        prompt = FILTER_EXPRESSION_PROMPT.format(
+            metadata_schema=metadata_schema,
+            reference_material=self.reference_material,
+            query=query,
         )
+        with open("debug_metadata_filter_prompt.txt", "w", encoding="utf-8") as f:
+            f.write(prompt)
         try:
             response = self.llm.invoke(prompt)
             raw = response.content
-            
-            # Ensure raw is a string
             if not isinstance(raw, str):
-                logger.warning(f"Unexpected response type: {type(raw)}, converting to string")
+                logger.warning("LLM response is not string, casting to str.")
                 raw = str(raw)
-            
-            # Extract JSON from potential markdown code blocks
-            cleaned_json = self._extract_json_from_response(raw)
-            logger.debug(f"Raw LLM response: {raw}")
-            logger.debug(f"Cleaned JSON: {cleaned_json}")
-            
-            parsed = json.loads(cleaned_json)
-            filters = parsed.get("filters", [])
-            if not isinstance(filters, list):
-                return []
-            # Basic validation: only keep filters with known keys and non-empty values
-            sanitized = []
-            for f in filters:
-                key = f.get("key")
-                values = f.get("values", [])
-                if key in metadata_catalog and isinstance(values, list) and values:
-                    # Ensure values are valid candidates
-                    valid_values = [v for v in values if v in metadata_catalog[key]]
-                    if valid_values:
-                        sanitized.append({"key": key, "values": valid_values})
-            logger.info(f"Extracted metadata filters: {sanitized}")
-            return sanitized
-        except Exception as e:
-            logger.warning(f"Metadata filter extraction failed: {e}")
-            return []
+
+            expression = self._clean_expression(raw)
+            logger.info("Generated metadata expression: %s", expression or "NONE")
+            return expression
+        except Exception as exc:
+            logger.warning("Metadata expression generation failed: %s", exc)
+            return None
+
+    def _load_reference_material(self) -> str:
+        sections: List[str] = []
+        for filename in REFERENCE_FILES:
+            path = REFERENCE_DIR / filename
+            try:
+                sections.append(path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                logger.warning("Reference file not found: %s", path)
+            except Exception as exc:
+                logger.warning("Failed to read reference file %s: %s", path, exc)
+        return "\n\n".join(sections)
+
+    @staticmethod
+    def _summarize_metadata(metadata_catalog: Dict[str, Dict[str, List[str]]]) -> str:
+        lines = []
+        for source, metadata in metadata_catalog.items():
+            lines.append(f"来源: {source}")
+            for key, values in metadata.items():
+                sample = "、".join(values)
+                lines.append(f"- {key} (共{len(values)}个): {sample}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _clean_expression(raw_text: str) -> str | None:
+        text = raw_text.strip()
+        fence_pattern = r"```(?:[a-zA-Z0-9_+-]+)?\s*([\s\S]*?)```"
+        match = re.search(fence_pattern, text)
+        if match:
+            text = match.group(1).strip()
+
+        if text.startswith("\"") and text.endswith("\"") and len(text) >= 2:
+            text = text[1:-1].strip()
+
+        if text.upper() == "NONE" or not text:
+            return None
+
+        return text
 
