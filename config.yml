@@ -68,7 +68,7 @@ cache:
   response_ttl: 300   # 30 minutes for query responses (users may want varied responses)
   # L2 semantic cache settings
   response_l2_enabled: true
-  similarity_threshold: 0.8  # Minimum similarity for L2 cache matching (0-1)
+  similarity_threshold: 0.9  # Minimum similarity for L2 cache matching (0-1)
   vector_host: "localhost"
   vector_port: 19530
   vector_collection: "cookhero_response_cache"
