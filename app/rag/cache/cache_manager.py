@@ -135,12 +135,10 @@ class CacheManager:
         self,
         data_source: str,
         rewritten_query: str,
-        metadata_expression: Optional[str],
     ) -> str:
         """Generate cache key for retrieval results including metadata filters."""
         query_hash = self._compute_hash(rewritten_query)
-        metadata_hash = self._compute_hash(metadata_expression or "__none__")
-        return f"rag:retrieval:{data_source}:{query_hash}:{metadata_hash}"
+        return f"rag:retrieval:{data_source}:{query_hash}"
     
     def _get_response_key(self, rewritten_query: str) -> str:
         """Generate cache key for query responses."""
@@ -150,8 +148,7 @@ class CacheManager:
     def get_retrieval_cache(
         self,
         data_source: str,
-        rewritten_query: str,
-        metadata_expression: Optional[str],
+        rewritten_query: str
     ) -> Optional[List[Document]]:
         """
         Get cached retrieval results (L1 cache only).
@@ -168,7 +165,7 @@ class CacheManager:
             return None
         
         try:
-            cache_key = self._get_retrieval_key(data_source, rewritten_query, metadata_expression)
+            cache_key = self._get_retrieval_key(data_source, rewritten_query)
             cached_data = self.keyword_cache.get(cache_key)
             
             if cached_data:
@@ -187,7 +184,6 @@ class CacheManager:
         self,
         data_source: str,
         rewritten_query: str,
-        metadata_expression: Optional[str],
         documents: List[Document]
     ) -> bool:
         """
@@ -206,7 +202,7 @@ class CacheManager:
             return False
         
         try:
-            cache_key = self._get_retrieval_key(data_source, rewritten_query, metadata_expression)
+            cache_key = self._get_retrieval_key(data_source, rewritten_query)
             serialized = pickle.dumps(documents)
             stored = self.keyword_cache.set(cache_key, serialized, ttl_seconds=self.retrieval_ttl)
             if stored:

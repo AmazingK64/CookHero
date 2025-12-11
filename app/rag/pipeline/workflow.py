@@ -103,7 +103,6 @@ class RetrievalExecutor:
             cached_docs = self._cache_manager.get_retrieval_cache(
                 source_name,
                 rewritten_query,
-                metadata_expression,
             )
         if cached_docs:
             logger.info(
@@ -168,7 +167,6 @@ class RetrievalExecutor:
             self._cache_manager.set_retrieval_cache(
                 source_name,
                 rewritten_query,
-                metadata_expression,
                 final_docs,
             )
 
