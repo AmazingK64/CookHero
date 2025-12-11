@@ -39,6 +39,8 @@ pip install -r requirements.txt
 ```bash
 # .env 文件内容示例
 SILICONFLOW_API_KEY=your_api_key_here
+CACHE_VECTOR_USER=your_milvus_username  # 如果 Milvus 需要认证
+CACHE_VECTOR_PASSWORD=your_milvus_password  # 如果 Milvus 需要认证
 REDIS_PASSWORD=your_redis_password  # 如果需要
 ```
 
@@ -62,7 +64,7 @@ cd scripts
 python run_ingestion.py
 ```
 
-此过程可能需要几分钟到几十分钟，取决于数据量。
+此过程可能需要几分钟到几十分钟，取决于数据量。脚本将处理菜谱、烹饪技巧和通用文本数据源。
 
 ## 构建与运行
 
