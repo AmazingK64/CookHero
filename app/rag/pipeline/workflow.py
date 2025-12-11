@@ -99,8 +99,12 @@ class RetrievalExecutor:
     ) -> List[Document]:
         logger.info("Retrieving from source: %s", source_name)
         cached_docs: Optional[List[Document]] = None
-        if not metadata_expression and self._cache_manager:
-            cached_docs = self._cache_manager.get_retrieval_cache(source_name, rewritten_query)
+        if self._cache_manager:
+            cached_docs = self._cache_manager.get_retrieval_cache(
+                source_name,
+                rewritten_query,
+                metadata_expression,
+            )
         if cached_docs:
             logger.info(
                 "Using cached retrieval results for source '%s': %d documents",
@@ -161,7 +165,12 @@ class RetrievalExecutor:
             logger.info(f"Content preview: {doc.page_content[:10]}...")
 
         if self._cache_manager:
-            self._cache_manager.set_retrieval_cache(source_name, rewritten_query, final_docs)
+            self._cache_manager.set_retrieval_cache(
+                source_name,
+                rewritten_query,
+                metadata_expression,
+                final_docs,
+            )
 
         return final_docs
 
