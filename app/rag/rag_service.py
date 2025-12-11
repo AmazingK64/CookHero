@@ -80,6 +80,8 @@ class RAGService:
         self.cache_manager: CacheManager | None = None
         if self.config.cache.enabled:
             embeddings = get_embedding_model(self.config)
+            cache_vector_host = self.config.cache.vector_host or self.config.vector_store.host
+            cache_vector_port = self.config.cache.vector_port or self.config.vector_store.port
             self.cache_manager = CacheManager(
                 redis_host=self.config.cache.redis_host,
                 redis_port=self.config.cache.redis_port,
@@ -89,7 +91,13 @@ class RAGService:
                 response_ttl=self.config.cache.response_ttl,
                 similarity_threshold=self.config.cache.similarity_threshold,
                 embeddings=embeddings,
-                l2_enabled=self.config.cache.l2_enabled
+                response_l2_enabled=self.config.cache.response_l2_enabled,
+                vector_host=cache_vector_host,
+                vector_port=cache_vector_port,
+                vector_collection=self.config.cache.vector_collection,
+                vector_user=self.config.cache.vector_user,
+                vector_password=self.config.cache.vector_password,
+                vector_secure=self.config.cache.vector_secure,
             )
             logger.info("Cache manager initialized.")
         else:
