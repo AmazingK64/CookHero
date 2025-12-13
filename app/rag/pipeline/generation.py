@@ -153,6 +153,8 @@ class GenerationIntegrationModule:
         
         if rewritten_query != query:
             logger.info(f"Query rewritten: '{query}' -> '{rewritten_query}'")
+            # fuse the rewritten query back to original if needed
+            rewritten_query = f"Origin User Query: {query}\nAI Rewritten Query: {rewritten_query}"
         else:
             logger.info(f"Query did not require rewriting: '{query}'")
         
