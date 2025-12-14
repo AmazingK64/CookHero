@@ -5,7 +5,7 @@ logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-from app.rag.rag_service import rag_service_instance
+from app.services.rag_service import rag_service_instance
 
 def test_rag_service():
     """
@@ -27,7 +27,7 @@ def test_rag_service():
         logger.info(f"\n--- Question {i+1}: {question} ---")
         try:
             logger.info("Streaming response:")
-            response_chunks = rag_service_instance.ask(question, stream=False)
+            response_chunks = rag_service_instance.ask_with_generation(question, stream=False)
             full_response = ""
             for chunk in response_chunks:
                 print(chunk, end="", flush=True)
