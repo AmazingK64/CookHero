@@ -8,3 +8,5 @@ export { ChatWindow } from './ChatWindow';
 export { Header } from './Header';
 export { MessageBubble } from './MessageBubble';
 export { MarkdownRenderer } from './MarkdownRenderer';
+
+export { ConversationList } from './ConversationList';

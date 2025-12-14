@@ -21,9 +21,18 @@ export function Header({ onClear, conversationId }: HeaderProps) {
       
       <div className="flex items-center gap-2">
         {conversationId && (
-          <span className="text-xs text-gray-400 hidden sm:block">
-            会话: {conversationId.slice(0, 8)}...
-          </span>
+          <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+            <span className="font-mono break-all">{conversationId}</span>
+            <button
+              className="text-gray-400 hover:text-gray-600"
+              onClick={() => navigator.clipboard.writeText(conversationId)}
+              title="复制会话 ID"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5h9m-9 4h9m-9 4h9m-9 4h6m-9 0h.01M6 5h.01M6 9h.01M6 13h.01" />
+              </svg>
+            </button>
+          </div>
         )}
         
         <button

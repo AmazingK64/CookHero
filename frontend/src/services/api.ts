@@ -3,7 +3,12 @@
  * API service for communicating with CookHero backend
  */
 
-import type { ConversationRequest, SSEEvent } from '../types';
+import type {
+  ConversationHistoryResponse,
+  ConversationRequest,
+  ConversationSummary,
+  SSEEvent,
+} from '../types';
 
 const API_BASE = '/api/v1';
 
@@ -67,13 +72,28 @@ export async function* streamConversation(
 /**
  * Get conversation history
  */
-export async function getConversationHistory(conversationId: string) {
+export async function getConversationHistory(
+  conversationId: string
+): Promise<ConversationHistoryResponse> {
   const response = await fetch(`${API_BASE}/conversation/${conversationId}`);
-  
+
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
-  
+
+  return response.json();
+}
+
+/**
+ * List conversations (in-memory for now)
+ */
+export async function listConversations(): Promise<ConversationSummary[]> {
+  const response = await fetch(`${API_BASE}/conversation`);
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
   return response.json();
 }
 

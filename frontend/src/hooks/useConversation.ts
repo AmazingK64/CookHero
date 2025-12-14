@@ -3,9 +3,19 @@
  * Custom hook for managing conversation state
  */
 
-import { useState, useCallback, useRef } from 'react';
-import type { Message, IntentInfo, Source } from '../types';
-import { streamConversation } from '../services/api';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import type {
+  Message,
+  IntentInfo,
+  Source,
+  ConversationSummary,
+  ConversationHistoryResponse,
+} from '../types';
+import {
+  getConversationHistory,
+  listConversations,
+  streamConversation,
+} from '../services/api';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -14,9 +24,38 @@ function generateId(): string {
 export function useConversation() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>();
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const refreshConversations = useCallback(async () => {
+    try {
+      const list = await listConversations();
+      setConversations(list);
+    } catch (err) {
+      console.error('Failed to list conversations:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshConversations();
+  }, [refreshConversations]);
+
+  const mapHistoryToMessages = useCallback(
+    (history: ConversationHistoryResponse['messages']): Message[] => {
+      return history.map((msg, idx) => ({
+        id: `${msg.timestamp}-${idx}`,
+        role: msg.role,
+        content: msg.content,
+        timestamp: new Date(msg.timestamp),
+        sources: msg.sources,
+        intent: msg.intent,
+        thinking: msg.thinking,
+      }));
+    },
+    []
+  );
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || isLoading) return;
@@ -38,7 +77,7 @@ export function useConversation() {
     const assistantMessage: Message = {
       id: assistantMessageId,
       role: 'assistant',
-      content: '',
+      content: '（正在组织回答…）',
       timestamp: new Date(),
       isStreaming: true,
     };
@@ -107,6 +146,7 @@ export function useConversation() {
           case 'done':
             if (event.conversation_id) {
               setConversationId(event.conversation_id);
+              refreshConversations();
             }
             setMessages(prev =>
               prev.map(msg =>
@@ -127,7 +167,23 @@ export function useConversation() {
     } finally {
       setIsLoading(false);
     }
-  }, [conversationId, isLoading]);
+  }, [conversationId, isLoading, refreshConversations]);
+  
+  const selectConversation = useCallback(async (id: string) => {
+    if (!id) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const history = await getConversationHistory(id);
+      setConversationId(history.conversation_id);
+      setMessages(mapHistoryToMessages(history.messages));
+    } catch (err) {
+      console.error('Failed to load conversation:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load conversation');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [mapHistoryToMessages]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -153,9 +209,12 @@ export function useConversation() {
   return {
     messages,
     conversationId,
+    conversations,
     isLoading,
     error,
     sendMessage,
+    selectConversation,
+    refreshConversations,
     clearMessages,
     stopGeneration,
   };
