@@ -43,6 +43,21 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           </div>
         )}
 
+        {/* Thinking process */}
+        {!isUser && message.thinking && message.thinking.length > 0 && (
+          <div className="mb-3 text-xs text-gray-500">
+            <p className="font-semibold text-gray-600 mb-1">🤔 思考过程</p>
+            <ul className="space-y-1">
+              {message.thinking.map((step, index) => (
+                <li key={index} className="flex items-start gap-2">
+                  <span className="text-orange-500">{index + 1}.</span>
+                  <span className="flex-1 leading-relaxed">{step}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Message content */}
         <div className={isUser ? '' : 'prose prose-sm max-w-none'}>
           {isUser ? (

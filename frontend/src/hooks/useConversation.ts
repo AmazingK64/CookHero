@@ -48,6 +48,7 @@ export function useConversation() {
       let currentContent = '';
       let currentIntent: IntentInfo | undefined;
       let currentSources: Source[] = [];
+      let currentThinking: string[] = [];
 
       for await (const event of streamConversation({
         message: content,
@@ -63,6 +64,22 @@ export function useConversation() {
                   : msg
               )
             );
+            break;
+
+          case 'thinking':
+            {
+              const thought = event.content || (typeof event.data === 'string' ? event.data : '');
+              if (thought) {
+                currentThinking = [...currentThinking, thought];
+                setMessages(prev =>
+                  prev.map(msg =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, thinking: currentThinking }
+                      : msg
+                  )
+                );
+              }
+            }
             break;
 
           case 'text':

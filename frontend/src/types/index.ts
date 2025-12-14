@@ -11,6 +11,7 @@ export interface Message {
   sources?: Source[];
   intent?: IntentInfo;
   isStreaming?: boolean;
+  thinking?: string[];
 }
 
 export interface Source {
@@ -18,6 +19,7 @@ export interface Source {
   info: string;
   title?: string;
   url?: string;
+  category?: string;
 }
 
 export interface IntentInfo {
@@ -33,7 +35,7 @@ export interface ConversationRequest {
 }
 
 export interface SSEEvent {
-  type: 'intent' | 'text' | 'sources' | 'done';
+  type: 'intent' | 'thinking' | 'text' | 'sources' | 'done';
   content?: string;
   data?: IntentInfo | Source[] | string;
   conversation_id?: string;
