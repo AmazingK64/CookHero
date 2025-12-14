@@ -5,7 +5,6 @@ from pathlib import Path
 from app.config import DefaultRAGConfig, RAGConfig
 from app.rag.data_sources.howtocook_data_source import HowToCookDataSource
 from app.rag.data_sources.tips_data_source import TipsDataSource
-from app.rag.data_sources.generic_text_data_source import GenericTextDataSource
 from app.rag.embeddings.embedding_factory import get_embedding_model
 from app.rag.vector_stores.vector_store_factory import get_vector_store
 
@@ -92,15 +91,6 @@ def main():
         source_name="tips",
         data_source_class=TipsDataSource,
         data_source_config=config.data_source.tips
-    )
-    
-    # Ingest Generic Text documents
-    ingest_data_source(
-        config=config,
-        embeddings=embeddings,
-        source_name="generic_text",
-        data_source_class=GenericTextDataSource,
-        data_source_config=config.data_source.generic_text
     )
 
     logger.info("--- CookHero Data Ingestion Pipeline Finished ---")
