@@ -8,9 +8,9 @@ from typing import AsyncGenerator, Dict, List, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-from app.core.config_loader import DefaultRAGConfig
-from app.rag.pipeline.intent_detector import IntentDetector, QueryIntent
-from app.rag.rag_service import rag_service_instance
+from app.config import DefaultRAGConfig
+from app.rag.pipeline.intent_detector import IntentDetector
+from app.services.rag_service import rag_service_instance
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ class Message:
     timestamp: datetime = field(default_factory=datetime.now)
     sources: Optional[List[Dict]] = None  # RAG sources if any
     intent: Optional[str] = None  # Detected intent
+    thinking: Optional[List[str]] = None  # Intermediate reasoning steps
 
 
 @dataclass
@@ -113,6 +114,14 @@ class ConversationService:
         
         return messages
     
+    def _build_history_list(self, conversation: Conversation, limit: int = 10) -> List[Dict[str, str]]:
+        """Build chat history as a simple list of dicts for query rewriting."""
+        recent_messages = conversation.messages[-limit:]
+        return [
+            {"role": msg.role, "content": msg.content}
+            for msg in recent_messages
+        ]
+    
     async def chat(
         self,
         message: str,
@@ -141,35 +150,63 @@ class ConversationService:
         # Yield intent information
         yield f"data: {json.dumps({'type': 'intent', 'data': {'need_rag': need_rag, 'intent': intent.value, 'reason': reason}})}\n\n"
         
-        sources = []
+        sources: List[Dict] = []
         full_response = ""
+        thinking_steps: List[str] = []
+
+        def emit_thinking(step: str) -> str:
+            thinking_steps.append(step)
+            return f"data: {json.dumps({'type': 'thinking', 'content': step})}\n\n"
         
         if need_rag:
-            # Use RAG pipeline
+            # Use RAG pipeline with history-aware query rewriting
             logger.info(f"Using RAG for query: {message}")
+            yield emit_thinking("正在分析你的问题并检索 CookHero 知识库...")
             
             try:
-                # Get RAG response (streaming)
-                response_generator = rag_service_instance.ask(message, stream=True)
+                # Build chat history for query rewriting
+                chat_history = self._build_history_list(conversation)
                 
-                async for chunk in self._wrap_sync_generator(response_generator):
+                # Rewrite query with chat history context
+                rewritten_query = rag_service_instance.rewrite_query_with_history(
+                    message, chat_history
+                )
+                
+                # Retrieve context once and reuse for generation + sources
+                retrieval_result = rag_service_instance.retrieve(rewritten_query)
+                doc_count = len(retrieval_result.documents)
+                if doc_count:
+                    yield emit_thinking(f"从知识库中找到 {doc_count} 条相关资料，正在组织回答...")
+                else:
+                    yield emit_thinking("知识库里没有找到直接相关的资料，将结合常识为你回答。")
+                
+                sources = retrieval_result.sources or [
+                    {"type": "rag", "info": "CookHero 知识库"}
+                ]
+                yield f"data: {json.dumps({'type': 'sources', 'data': sources})}\n\n"
+                
+                context_prompt = self._build_rag_context_prompt(
+                    retrieval_result.context,
+                    rewritten_query
+                )
+                async for chunk in self._generate_llm_response(
+                    conversation,
+                    extra_system_prompt=context_prompt
+                ):
                     full_response += chunk
                     yield f"data: {json.dumps({'type': 'text', 'content': chunk})}\n\n"
                 
-                # TODO: Extract actual sources from RAG pipeline
-                # For now, we indicate RAG was used
-                sources = [{"type": "rag", "info": "Retrieved from CookHero knowledge base"}]
-                
             except Exception as e:
                 logger.error(f"RAG error: {e}", exc_info=True)
+                yield emit_thinking("检索遇到问题，改为直接回答你的问题。")
                 # Fallback to direct LLM
-                async for chunk in self._direct_llm_response(conversation, message):
+                async for chunk in self._direct_llm_response(conversation):
                     full_response += chunk
                     yield f"data: {json.dumps({'type': 'text', 'content': chunk})}\n\n"
         else:
             # Direct LLM conversation
             logger.info(f"Using direct LLM for query: {message}")
-            async for chunk in self._direct_llm_response(conversation, message):
+            async for chunk in self._direct_llm_response(conversation):
                 full_response += chunk
                 yield f"data: {json.dumps({'type': 'text', 'content': chunk})}\n\n"
         
@@ -178,29 +215,46 @@ class ConversationService:
             role="assistant",
             content=full_response,
             sources=sources if sources else None,
-            intent=intent.value
+            intent=intent.value,
+            thinking=thinking_steps if thinking_steps else None
         )
         conversation.messages.append(assistant_message)
-        
-        # Yield sources if any
-        if sources:
-            yield f"data: {json.dumps({'type': 'sources', 'data': sources})}\n\n"
         
         # Yield completion signal
         yield f"data: {json.dumps({'type': 'done', 'conversation_id': conversation.id})}\n\n"
     
     async def _direct_llm_response(
         self,
-        conversation: Conversation,
-        current_message: str
+        conversation: Conversation
     ) -> AsyncGenerator[str, None]:
         """Generate a direct LLM response without RAG."""
+        async for chunk in self._generate_llm_response(conversation):
+            if chunk:
+                yield chunk
+
+    async def _generate_llm_response(
+        self,
+        conversation: Conversation,
+        extra_system_prompt: Optional[str] = None
+    ) -> AsyncGenerator[str, None]:
+        """Stream responses from the base LLM with optional extra system guidance."""
         chat_history = self._build_chat_history(conversation)
-        chat_history.append(HumanMessage(content=current_message))
+        if extra_system_prompt:
+            chat_history.append(SystemMessage(content=extra_system_prompt))
         
         async for chunk in self.llm.astream(chat_history):
             if chunk.content:
                 yield str(chunk.content)
+
+    def _build_rag_context_prompt(self, context: str, rewritten_query: str) -> str:
+        """Construct the system prompt that injects retrieved context for generation."""
+        sanitized_context = context.strip() or "（检索结果为空，尽量结合通用烹饪知识回答）"
+        return (
+            "下面是 CookHero 知识库中与当前问题最相关的资料，请结合它们回答用户。"
+            "如果资料不足，请坦诚说明并给出合理的建议。\n\n"
+            f"【重写后的检索语句】\n{rewritten_query}\n\n"
+            f"【检索到的参考内容】\n{sanitized_context}"
+        )
     
     async def _wrap_sync_generator(self, sync_gen):
         """Wrap a synchronous generator as async."""
@@ -232,7 +286,8 @@ class ConversationService:
                 "content": msg.content,
                 "timestamp": msg.timestamp.isoformat(),
                 "sources": msg.sources,
-                "intent": msg.intent
+                "intent": msg.intent,
+                "thinking": msg.thinking,
             }
             for msg in conversation.messages
         ]
