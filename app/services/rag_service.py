@@ -287,7 +287,7 @@ class RAGService:
         logger.info(
             "retrieval docs total=%d sample=%s",
             len(processed_docs),
-            doc_summaries[:5],
+            doc_summaries,
         )
         
         return RetrievalResult(
