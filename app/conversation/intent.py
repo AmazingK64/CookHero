@@ -1,7 +1,8 @@
 import json
 import logging
+from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
+from typing import Optional
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -21,34 +22,49 @@ class QueryIntent(Enum):
     RECOMMENDATION = "recommendation"
 
 
+@dataclass
+class IntentDetectionResult:
+    """Structured intent detection result with room for future extensions."""
+
+    need_rag: bool
+    intent: QueryIntent
+    reason: str
+    raw: dict
+
+
 INTENT_DETECTION_PROMPT_TEMPLATE = """
 <|system|>
-你是一个烹饪助手的意图分类器。你的任务是判断用户的问题是否需要查询食谱知识库。
+你是一个烹饪助手的意图分类器。你的任务是结合**当前问题**和**对话历史**，判断是否需要查询知识库，并给出意图分类。
 
-**分类规则：**
+**输入信号：**
+- 当前问题：用户最新的一句话
+- 对话历史：按时间顺序的多轮对话，可能包含指代、省略或承接
 
-1. **需要查询知识库的情况** (返回 need_rag: true)：
-   - 询问具体菜品的做法（如"红烧肉怎么做"）
-   - 询问烹饪技巧或方法（如"如何让肉更嫩"）
-   - 基于食材询问能做什么菜（如"有鸡蛋能做什么"）
-   - 请求推荐菜品（如"晚餐吃什么"）
-   - 询问食材处理方法（如"牛肉怎么腌制"）
-   - 询问厨房相关知识（如"需要准备什么厨具"）
-
-2. **不需要查询知识库的情况** (返回 need_rag: false)：
-   - 简单的问候（如"你好"、"谢谢"）
-   - 与烹饪无关的闲聊（如"今天天气怎么样"）
-   - 询问助手的能力（如"你能做什么"）
-   - 确认性回复（如"好的"、"明白了"）
+**分类规则（可扩展）：**
+1. **需要查询知识库 (need_rag: true)**：
+    - 询问具体菜品做法、步骤、时间、技巧
+    - 基于食材/场景的菜品推荐或能做什么
+    - 烹饪技巧、口味调整、处理方法
+    - 厨房准备、器具、时间/温度等操作性问题
+2. **不需要查询知识库 (need_rag: false)**：
+    - 知识库只有菜品做法和烹饪技巧，其他有关菜品的问题不需要RAG，例如营养价值、历史文化等
+    - 闲聊、客套、感谢
+    - 与烹饪无关的对话
+    - 纯确认、澄清（如“好的”“就这样”）
 
 **输出格式：**
-仅返回一个 JSON 对象，格式如下：
 {{"need_rag": true/false, "intent": "intent_type", "reason": "简短理由"}}
+
+你必须输出一个 JSON 对象；请勿使用 Markdown；请勿在 JSON 之外添加任何文本；输出必须是有效的 JSON。
 
 intent_type 可选值：recipe_search, cooking_tips, ingredient_info, recommendation, general_chat
 
 <|user|>
-用户问题: {query}
+【对话历史】
+{history}
+
+【当前问题】
+{query}
 <|assistant|>
 """
 
@@ -79,33 +95,35 @@ class IntentDetector:
             "IntentDetector initialized with model: %s", self.llm_config.model_name
         )
 
-    def detect(self, query: str) -> Tuple[bool, QueryIntent, str]:
-        """
-        Detect if the query needs RAG retrieval.
+    def detect(
+        self,
+        query: str,
+        history_text: Optional[str] = None,
+    ) -> IntentDetectionResult:
+        """Detect if the query needs RAG retrieval with history awareness.
 
         Args:
-            query: The user's input query.
-
-        Returns:
-            Tuple of (need_rag, intent, reason)
+            query: Latest user query.
+            history_text: Pre-formatted history text (already concatenated by ContextManager).
         """
+        history_str = history_text
+
         try:
-            response = self.chain.invoke({"query": query})
+            response = self.chain.invoke({"query": query, "history": history_str})
             content = response.strip()
 
-            # Parse JSON response
-            # Handle potential markdown code blocks
+            logger.info("Intent detection response: %s", content)
+
             if content.startswith("```"):
-                content = content.split("```", 1)[1]
+                content = content.strip("```").strip()
                 if content.startswith("json"):
-                    content = content[4:]
+                    content = content[4:].strip()
 
             result = json.loads(content)
             need_rag = result.get("need_rag", True)
             intent_str = result.get("intent", "general_chat")
             reason = result.get("reason", "")
 
-            # Map string to enum
             intent_map = {
                 "recipe_search": QueryIntent.RECIPE_SEARCH,
                 "cooking_tips": QueryIntent.COOKING_TIPS,
@@ -121,11 +139,20 @@ class IntentDetector:
                 intent.value,
                 reason,
             )
-            return need_rag, intent, reason
-
-        except Exception as e:
-            logger.warning(
-                "Intent detection failed: %s. Defaulting to RAG enabled.", e
+            return IntentDetectionResult(
+                need_rag=need_rag,
+                intent=intent,
+                reason=reason,
+                raw=result,
             )
-            # Default to using RAG when detection fails
-            return True, QueryIntent.GENERAL_CHAT, "Detection failed, using default"
+
+        except Exception as exc:
+            logger.warning(
+                "Intent detection failed: %s. Defaulting to non-RAG mode.", exc
+            )
+            return IntentDetectionResult(
+                need_rag=False,
+                intent=QueryIntent.GENERAL_CHAT,
+                reason="Detection failed, using default",
+                raw={},
+            )

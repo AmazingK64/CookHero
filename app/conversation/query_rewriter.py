@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List
+from typing import List
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -65,25 +65,15 @@ class QueryRewriter:
         )
 
     def rewrite_with_history(
-        self, current_query: str, chat_history: List[Dict[str, str]]
+        self, current_query: str, history_text: str
     ) -> str:
-        if not chat_history:
+        if not history_text.strip():
             return current_query
-
-        history_parts = []
-        for msg in chat_history[-6:]:  # Last 6 messages for context (3 turns)
-            role = "User" if msg.get("role") == "user" else "Assistant"
-            content = msg.get("content", "")
-            if len(content) > 500:
-                content = content[:500] + "..."
-            history_parts.append(f"{role}: {content}")
-
-        history_str = "\n".join(history_parts)
 
         try:
             chain = HISTORY_REWRITE_PROMPT | self.rewrite_llm | StrOutputParser()
             rewritten = (
-                chain.invoke({"history": history_str, "query": current_query}).strip()
+                chain.invoke({"history": history_text, "query": current_query}).strip()
             )
 
             if rewritten and rewritten != current_query:
