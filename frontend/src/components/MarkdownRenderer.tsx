@@ -1,72 +1,120 @@
 // src/components/MarkdownRenderer.tsx
 /**
- * Simple Markdown renderer component
+ * Markdown renderer component using react-markdown
  */
 
-import { useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import type { Components } from 'react-markdown';
+
+// Import highlight.js styles (GitHub Dark theme)
+import 'highlight.js/styles/github-dark.css';
 
 interface MarkdownRendererProps {
   content: string;
 }
 
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
-  const htmlContent = useMemo(() => {
-    if (!content) return '';
-    
-    let html = content;
-    
-    // Escape HTML
-    html = html
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    
-    // Headers
-    html = html.replace(/^### (.+)$/gm, '<h3 class="text-lg font-semibold mt-4 mb-2">$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2 class="text-xl font-semibold mt-4 mb-2">$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold mt-4 mb-2">$1</h1>');
-    
-    // Bold and italic
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold">$1</strong>');
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    
-    // Code blocks
-    html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, 
-      '<pre class="bg-gray-800 text-gray-100 p-3 rounded-lg overflow-x-auto my-2"><code>$2</code></pre>');
-    
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, 
-      '<code class="bg-gray-200 text-gray-800 px-1.5 py-0.5 rounded text-sm">$1</code>');
-    
-    // Unordered lists
-    html = html.replace(/^[\-\*] (.+)$/gm, '<li class="ml-4 list-disc">$1</li>');
-    
-    // Ordered lists
-    html = html.replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>');
-    
-    // Wrap consecutive list items
-    html = html.replace(/(<li[^>]*>.*<\/li>\n?)+/g, '<ul class="my-2">$&</ul>');
-    
-    // Links
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, 
-      '<a href="$2" class="text-orange-600 hover:underline" target="_blank" rel="noopener">$1</a>');
-    
-    // Line breaks (but not inside code blocks or lists)
-    html = html.replace(/\n\n/g, '</p><p class="my-2">');
-    html = html.replace(/\n(?!<)/g, '<br/>');
-    
-    // Wrap in paragraph if not already wrapped
-    if (!html.startsWith('<')) {
-      html = `<p class="my-2">${html}</p>`;
+// Custom components for styling
+const components: Components = {
+  h1: ({ children }) => (
+    <h1 className="text-2xl font-bold mt-4 mb-2">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="text-xl font-semibold mt-4 mb-2">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-lg font-semibold mt-3 mb-2">{children}</h3>
+  ),
+  h4: ({ children }) => (
+    <h4 className="text-base font-semibold mt-3 mb-1">{children}</h4>
+  ),
+  p: ({ children }) => (
+    <p className="my-2 leading-relaxed">{children}</p>
+  ),
+  ul: ({ children }) => (
+    <ul className="my-2 ml-4 list-disc space-y-1">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="my-2 ml-4 list-decimal space-y-1">{children}</ol>
+  ),
+  li: ({ children }) => (
+    <li className="leading-relaxed">{children}</li>
+  ),
+  a: ({ href, children }) => (
+    <a
+      href={href}
+      className="text-orange-600 dark:text-orange-400 hover:underline"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </a>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-orange-400 pl-4 my-3 italic text-gray-600 dark:text-gray-400">
+      {children}
+    </blockquote>
+  ),
+  code: ({ className, children }) => {
+    const isInline = !className;
+    if (isInline) {
+      return (
+        <code className="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">
+          {children}
+        </code>
+      );
     }
-    
-    return html;
-  }, [content]);
+    return <code className={className}>{children}</code>;
+  },
+  pre: ({ children }) => (
+    <pre className="bg-gray-800 dark:bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-3 text-sm">
+      {children}
+    </pre>
+  ),
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-3">
+      <table className="min-w-full border-collapse border border-gray-300 dark:border-gray-600">
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead className="bg-gray-100 dark:bg-gray-700">{children}</thead>
+  ),
+  th: ({ children }) => (
+    <th className="border border-gray-300 dark:border-gray-600 px-3 py-2 text-left font-semibold">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border border-gray-300 dark:border-gray-600 px-3 py-2">
+      {children}
+    </td>
+  ),
+  hr: () => (
+    <hr className="my-4 border-gray-300 dark:border-gray-600" />
+  ),
+  strong: ({ children }) => (
+    <strong className="font-semibold">{children}</strong>
+  ),
+  em: ({ children }) => (
+    <em className="italic">{children}</em>
+  ),
+};
+
+export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+  if (!content) return null;
 
   return (
-    <div 
-      className="markdown-content"
-      dangerouslySetInnerHTML={{ __html: htmlContent }} 
-    />
+    <div className="markdown-content">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeHighlight]}
+        components={components}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 }
