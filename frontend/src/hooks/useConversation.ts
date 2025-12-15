@@ -77,7 +77,7 @@ export function useConversation() {
     const assistantMessage: Message = {
       id: assistantMessageId,
       role: 'assistant',
-      content: '（正在组织回答…）',
+      content: '🤔',
       timestamp: new Date(),
       isStreaming: true,
     };
