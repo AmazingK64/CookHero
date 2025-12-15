@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { ChefHat, Sparkles, BookOpen, Lightbulb, UtensilsCrossed } from 'lucide-react';
 import type { Message } from '../types';
 import { MessageBubble } from './MessageBubble';
 
@@ -21,55 +22,95 @@ export function ChatWindow({ messages, isLoading }: ChatWindowProps) {
   }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-2">
+    <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-950">
       {messages.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-full text-gray-500">
-          <div className="text-6xl mb-4">🍳</div>
-          <h2 className="text-xl font-semibold mb-2">欢迎来到 CookHero!</h2>
-          <p className="text-center max-w-md">
-            我是你的智能烹饪助手，可以帮你查找菜谱、提供烹饪技巧，或者根据你手边的食材推荐美味佳肴。
-          </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-2">
-            <SuggestionChip text="红烧肉怎么做？" />
-            <SuggestionChip text="有鸡蛋能做什么？" />
-            <SuggestionChip text="今晚吃什么？" />
-            <SuggestionChip text="如何让炒菜更香？" />
+        <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 animate-in fade-in duration-500">
+          {/* Hero Section */}
+          <div className="relative mb-8">
+            <div className="w-24 h-24 bg-gradient-to-br from-orange-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
+              <ChefHat className="w-12 h-12 text-white" />
+            </div>
+            <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-500 rounded-lg flex items-center justify-center shadow-sm">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+          </div>
+          
+          <h2 className="text-3xl font-bold mb-2 text-gray-800 dark:text-gray-100">
+            Welcome to CookHero
+          </h2>
+          {/* <p className="text-center max-w-md mb-10 text-gray-600 dark:text-gray-400">
+            Your AI-powered cooking assistant. I can help you find recipes, provide cooking tips, and suggest dishes based on ingredients you have.
+          </p> */}
+          
+          {/* Feature Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-3xl mb-8">
+            <FeatureCard 
+              icon={<BookOpen className="w-5 h-5" />}
+              title="Recipe Search"
+              description="Find detailed cooking instructions"
+            />
+            <FeatureCard 
+              icon={<Lightbulb className="w-5 h-5" />}
+              title="Cooking Tips"
+              description="Learn professional techniques"
+            />
+            <FeatureCard 
+              icon={<UtensilsCrossed className="w-5 h-5" />}
+              title="Ingredient Match"
+              description="Discover dishes you can make"
+            />
+          </div>
+          
+          {/* Suggestion Chips */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
+            <SuggestionChip text="红烧肉怎么做？" emoji="🥩" />
+            <SuggestionChip text="鸡蛋和西红柿能做什么？" emoji="🍳" />
+            <SuggestionChip text="推荐一道健康晚餐" emoji="🥗" />
+            <SuggestionChip text="如何让炒菜更香？" emoji="✨" />
           </div>
         </div>
       ) : (
-        <>
+        <div className="max-w-3xl mx-auto w-full">
           {messages.map((message) => (
             <MessageBubble key={message.id} message={message} />
           ))}
-          {isLoading && messages[messages.length - 1]?.role === 'user' && (
-            <div className="flex justify-start mb-4">
-              <div className="bg-gray-100 rounded-2xl px-4 py-3">
-                <div className="flex items-center gap-2 text-gray-500">
-                  <span className="flex gap-1">
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </span>
-                  <span className="text-sm">正在思考...</span>
+          {/* Loading indicator */}
+          {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'user' && (
+             <div className="flex gap-4 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center shrink-0 shadow-sm">
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 </div>
-              </div>
-            </div>
+                <div className="space-y-2 pt-2">
+                   <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                     <span className="animate-pulse">CookHero is thinking...</span>
+                   </div>
+                </div>
+             </div>
           )}
-        </>
+        </div>
       )}
-      <div ref={messagesEndRef} />
+      <div ref={messagesEndRef} className="h-4" />
     </div>
   );
 }
 
-// Suggestion chip component
-function SuggestionChip({ text }: { text: string }) {
+function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
+  return (
+    <div className="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-center shadow-sm">
+      <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center mx-auto mb-3 text-orange-500">
+        {icon}
+      </div>
+      <h3 className="font-medium text-gray-800 dark:text-gray-100 mb-1">{title}</h3>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
+    </div>
+  );
+}
+
+function SuggestionChip({ text, emoji }: { text: string; emoji: string }) {
   return (
     <button
-      className="px-4 py-2 bg-orange-50 text-orange-600 rounded-full text-sm hover:bg-orange-100 transition-colors"
+      className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-left hover:border-orange-300 dark:hover:border-orange-700 hover:shadow-md transition-all duration-200 text-gray-700 dark:text-gray-300 group"
       onClick={() => {
-        // This will be handled by the parent component in a real implementation
-        // For now, we just show the suggestion
         const input = document.querySelector('textarea');
         if (input) {
           input.value = text;
@@ -78,7 +119,9 @@ function SuggestionChip({ text }: { text: string }) {
         }
       }}
     >
-      {text}
+      <span className="text-xl group-hover:scale-110 transition-transform">{emoji}</span>
+      <span>{text}</span>
     </button>
   );
 }
+

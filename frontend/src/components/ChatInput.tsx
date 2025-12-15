@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef, type KeyboardEvent } from 'react';
+import { SendHorizontal } from 'lucide-react';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -11,7 +12,7 @@ interface ChatInputProps {
   placeholder?: string;
 }
 
-export function ChatInput({ onSend, disabled = false, placeholder = '输入消息...' }: ChatInputProps) {
+export function ChatInput({ onSend, disabled = false, placeholder = 'Type a message...' }: ChatInputProps) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -44,8 +45,8 @@ export function ChatInput({ onSend, disabled = false, placeholder = '输入消�
   };
 
   return (
-    <div className="flex items-end gap-3 p-4 bg-white border-t border-gray-200">
-      <div className="flex-1 relative">
+    <div className="relative">
+      <div className="relative flex items-end gap-2 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
         <textarea
           ref={textareaRef}
           value={input}
@@ -54,28 +55,22 @@ export function ChatInput({ onSend, disabled = false, placeholder = '输入消�
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
-          className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-          style={{ maxHeight: '200px' }}
+          className="flex-1 max-h-[200px] py-2 px-2 bg-transparent border-none focus:ring-0 resize-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm leading-relaxed scrollbar-hide"
         />
+        <button
+          onClick={handleSend}
+          disabled={!input.trim() || disabled}
+          className={`
+            p-2 rounded-lg transition-all duration-200
+            ${input.trim() && !disabled
+              ? 'bg-blue-500 text-white hover:bg-blue-600 shadow-sm'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+            }
+          `}
+        >
+          <SendHorizontal className="w-5 h-5" />
+        </button>
       </div>
-      
-      <button
-        onClick={handleSend}
-        disabled={disabled || !input.trim()}
-        className="flex items-center justify-center w-12 h-12 bg-orange-500 text-white rounded-full hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-        title="发送消息"
-      >
-        {disabled ? (
-          <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-        ) : (
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-          </svg>
-        )}
-      </button>
     </div>
   );
 }

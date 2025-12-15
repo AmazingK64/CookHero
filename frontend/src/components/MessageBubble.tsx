@@ -3,8 +3,10 @@
  * Message bubble component for displaying chat messages
  */
 
+import { User, Bot, Search, MessageCircle, Loader2 } from 'lucide-react';
 import type { Message } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { ThinkingBlock } from './ThinkingBlock';
 
 interface MessageBubbleProps {
   message: Message;
@@ -12,75 +14,93 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
+  const hasText = !!(message.content && message.content.trim().length > 0);
+  const thinkingSteps = message.thinking ?? [];
+  const hasThinkingSteps = thinkingSteps.length > 0;
+  const isThinkingPhase = !isUser && !!message.isStreaming && !hasText;
+  const showThinkingBlock = !isUser && (hasThinkingSteps || isThinkingPhase);
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-      <div
-        className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-          isUser
-            ? 'bg-orange-500 text-white'
-            : 'bg-gray-100 text-gray-800'
-        }`}
-      >
-        {/* Intent indicator for assistant messages */}
-        {!isUser && message.intent && (
-          <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
-            {message.intent.need_rag ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                </svg>
-                知识库检索
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
-                </svg>
-                直接回复
-              </span>
-            )}
-          </div>
-        )}
+    <div className={`flex gap-4 mb-6 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+      {/* Avatar */}
+      <div className={`
+        w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm
+        ${isUser 
+          ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white' 
+          : 'bg-gradient-to-br from-orange-400 to-orange-500 text-white'}
+      `}>
+        {isUser ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
+      </div>
 
-        {/* Thinking process */}
-        {!isUser && message.thinking && message.thinking.length > 0 && (
-          <div className="mb-3 text-xs text-gray-500">
-            <p className="font-semibold text-gray-600 mb-1">🤔 思考过程</p>
-            <ul className="space-y-1">
-              {message.thinking.map((step, index) => (
-                <li key={index} className="flex items-start gap-2">
-                  <span className="text-orange-500">{index + 1}.</span>
-                  <span className="flex-1 leading-relaxed">{step}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Message content */}
-        <div className={isUser ? '' : 'prose prose-sm max-w-none'}>
-          {isUser ? (
-            <p className="whitespace-pre-wrap">{message.content}</p>
-          ) : (
-            <>
-              <MarkdownRenderer content={message.content} />
-              {message.isStreaming && (
-                <span className="inline-block w-2 h-4 ml-1 bg-gray-400 animate-pulse" />
+      {/* Content */}
+      <div className={`flex flex-col max-w-[85%] ${isUser ? 'items-end' : 'items-start'}`}>
+        {/* Name and Intent Indicator */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {isUser ? 'You' : 'CookHero'}
+          </span>
+          
+          {/* Intent Indicator (Assistant only) */}
+          {!isUser && message.intent && (
+            <div className="flex items-center">
+              {message.intent.need_rag ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium border border-green-200 dark:border-green-800">
+                  <Search className="w-3 h-3" />
+                  知识库检索
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-medium border border-blue-200 dark:border-blue-800">
+                  <MessageCircle className="w-3 h-3" />
+                  直接回复
+                </span>
               )}
-            </>
+            </div>
           )}
         </div>
 
-        {/* Sources */}
+        {/* Thinking Block (Assistant only) */}
+        {showThinkingBlock && (
+          <div className="w-full mb-2">
+            <ThinkingBlock 
+              steps={thinkingSteps} 
+              isThinking={isThinkingPhase} 
+            />
+          </div>
+        )}
+
+        {/* Spinner placeholder before text is ready */}
+        {!isUser && isThinkingPhase && (
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-2">
+            <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
+            <span>AI 正在准备回答...</span>
+          </div>
+        )}
+
+        {/* Message Text (hide while only thinking) */}
+        {isThinkingPhase ? null : (
+          <div className={`
+            text-sm leading-relaxed
+            ${isUser 
+              ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white px-4 py-3 rounded-2xl rounded-tr-sm shadow-sm' 
+              : 'prose prose-sm dark:prose-invert max-w-none text-gray-800 dark:text-gray-100 bg-gray-50 dark:bg-gray-800/50 px-4 py-3 rounded-2xl rounded-tl-sm border border-gray-200 dark:border-gray-700'
+            }
+          `}>
+            <MarkdownRenderer content={message.content.trim()} />
+          </div>
+        )}
+
+        {/* Sources (Assistant only) */}
         {!isUser && message.sources && message.sources.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-gray-200">
-            <p className="text-xs text-gray-500 mb-1">📚 参考来源：</p>
-            <ul className="text-xs text-gray-600">
-              {message.sources.map((source, index) => (
-                <li key={index} className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-orange-400 rounded-full" />
-                  {source.info}
+          <div className="mt-3 w-full">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 font-medium">📚 参考来源：</p>
+            <ul className="space-y-1">
+              {message.sources.map((source, idx) => (
+                <li 
+                  key={idx}
+                  className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                  <span>{source.info}</span>
                 </li>
               ))}
             </ul>
@@ -88,7 +108,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         )}
 
         {/* Timestamp */}
-        <div className={`text-xs mt-2 ${isUser ? 'text-orange-200' : 'text-gray-400'}`}>
+        <div className={`text-xs mt-2 ${isUser ? 'text-blue-200' : 'text-gray-400 dark:text-gray-500'}`}>
           {message.timestamp.toLocaleTimeString('zh-CN', {
             hour: '2-digit',
             minute: '2-digit',

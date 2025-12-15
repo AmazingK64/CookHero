@@ -3,8 +3,11 @@
  * Main App component for CookHero
  */
 
-import { Header, ChatWindow, ChatInput, ConversationList } from './components';
+import { useState } from 'react';
+import { Menu } from 'lucide-react';
+import { ChatWindow, ChatInput, Sidebar } from './components';
 import { useConversation } from './hooks/useConversation';
+import { useTheme } from './hooks/useTheme';
 
 function App() {
   const {
@@ -18,33 +21,80 @@ function App() {
     clearMessages,
   } = useConversation();
 
-  return (
-    <div className="flex h-screen bg-gray-50">
-      <div className="flex-shrink-0">
-        <ConversationList
-          conversations={conversations}
-          activeId={conversationId}
-          onSelect={selectConversation}
-        />
-      </div>
+  const { isDark, toggleTheme } = useTheme();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-      <div className="flex-1 flex flex-col">
-        <Header onClear={clearMessages} conversationId={conversationId} />
-        
-        <main className="flex-1 flex flex-col overflow-hidden max-w-4xl w-full mx-auto">
+  const handleNewChat = () => {
+    clearMessages();
+    if (window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
+  };
+
+  const handleSelectConversation = (id: string) => {
+    selectConversation(id);
+    if (window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+      <Sidebar
+        isOpen={isSidebarOpen}
+        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        conversations={conversations}
+        currentConversationId={conversationId || null}
+        onSelectConversation={handleSelectConversation}
+        onNewChat={handleNewChat}
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+      />
+
+      <div className="flex-1 flex flex-col h-full relative">
+        {/* Header */}
+        <header className="h-14 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm flex items-center px-4 justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              title={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🍳</span>
+              <h1 className="font-bold text-gray-800 dark:text-gray-100">CookHero</h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400 max-w-md">
+            {conversationId && (
+              <span className="font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded break-all whitespace-pre-wrap">
+                ID: {conversationId}
+              </span>
+            )}
+          </div>
+        </header>
+
+        <main className="flex-1 flex flex-col overflow-hidden relative">
           {error && (
-            <div className="mx-4 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            <div className="absolute top-4 left-4 right-4 z-10 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
               ⚠️ {error}
             </div>
           )}
           
           <ChatWindow messages={messages} isLoading={isLoading} />
           
-          <ChatInput
-            onSend={sendMessage}
-            disabled={isLoading}
-            placeholder="问我任何烹饪相关的问题..."
-          />
+          <div className="p-4 max-w-4xl w-full mx-auto">
+             <ChatInput
+                onSend={sendMessage}
+                disabled={isLoading}
+                placeholder="Ask CookHero anything about cooking..."
+              />
+              <div className="text-center text-xs text-gray-400 mt-2">
+                CookHero can make mistakes. Consider checking important information.
+              </div>
+          </div>
         </main>
       </div>
     </div>
