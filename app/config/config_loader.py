@@ -10,6 +10,7 @@ from typing import Any, Dict
 import yaml
 from dotenv import dotenv_values
 
+from app.config.database_config import DatabaseConfig
 from app.config.llm_config import LLMProviderConfig
 from app.config.rag_config import RAGConfig
 
@@ -27,6 +28,21 @@ def _load_config_data() -> Dict[str, Any]:
 def _load_secrets() -> Dict[str, Any]:
     """Load secrets from .env."""
     return dotenv_values(".env")
+
+
+def load_database_config() -> DatabaseConfig:
+    """Load database configuration with .env overrides."""
+    config_data = _load_config_data()
+    secrets = _load_secrets()
+
+    db_data = config_data.get("database", {}) or {}
+
+    # Override password from .env
+    db_password = secrets.get("DATABASE_PASSWORD")
+    if db_password:
+        db_data["password"] = db_password
+
+    return DatabaseConfig.model_validate(db_data)
 
 
 def load_llm_config() -> LLMProviderConfig:

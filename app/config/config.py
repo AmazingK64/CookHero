@@ -10,9 +10,10 @@ Design:
 
 from pydantic import BaseModel
 
+from app.config.database_config import DatabaseConfig
 from app.config.llm_config import LLMProviderConfig
 from app.config.rag_config import RAGConfig
-from app.config.config_loader import load_llm_config, load_rag_config
+from app.config.config_loader import load_database_config, load_llm_config, load_rag_config
 
 
 class Settings(BaseModel):
@@ -22,7 +23,7 @@ class Settings(BaseModel):
     Contains:
     1. Global configuration (API prefix, project name, etc.)
     2. Global LLM provider configuration
-    3. Module-specific configurations (RAG, etc.)
+    3. Module-specific configurations (RAG, Database, etc.)
     """
     # ==========================================================================
     # Global Configuration
@@ -39,6 +40,9 @@ class Settings(BaseModel):
 
     # RAG configuration loaded from config.yml
     rag: RAGConfig = load_rag_config(llm)
+
+    # Database configuration
+    database: DatabaseConfig = load_database_config()
     
     class Config:
         arbitrary_types_allowed = True

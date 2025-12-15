@@ -75,3 +75,24 @@ services:
     networks:
       - cookhero_net
     restart: always
+
+  postgres:
+    container_name: cookhero_postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cookhero
+      POSTGRES_USER: cookhero
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-cookhero_secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./volumes/postgres:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cookhero -d cookhero"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cookhero_net
+    restart: always

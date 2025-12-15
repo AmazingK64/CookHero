@@ -95,6 +95,21 @@ cache:
   # vector_user/vector_password: loaded from .env
 
 # ----------------------------------------------------------------------------
+# Database (PostgreSQL)
+# ----------------------------------------------------------------------------
+database:
+  host: "localhost"
+  port: 5432
+  database: "cookhero"
+  user: "cookhero"
+  # password: loaded from .env (DATABASE_PASSWORD)
+  pool_size: 5
+  max_overflow: 10
+  pool_timeout: 30
+  pool_recycle: 1800
+  echo: false
+
+# ----------------------------------------------------------------------------
 # Data Sources
 # ----------------------------------------------------------------------------
 data_source:

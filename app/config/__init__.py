@@ -19,6 +19,7 @@ Usage:
 """
 
 from app.config.config import settings, Settings, DefaultRAGConfig
+from app.config.database_config import DatabaseConfig
 from app.config.llm_config import LLMProviderConfig
 from app.config.rag_config import (
     RAGConfig,
@@ -39,6 +40,7 @@ __all__ = [
     "settings",
     "Settings",
     "DefaultRAGConfig",
+    "DatabaseConfig",
     "LLMProviderConfig",
     "LLMOverrideConfig",
     # RAG configuration classes
