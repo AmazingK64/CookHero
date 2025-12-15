@@ -71,7 +71,7 @@ class RAGService:
         if hasattr(self, '_initialized') and self._initialized:
             return
 
-        logger.info("Initializing RAGService for the first time...")
+        logger.info("Initializing RAGService")
         self.config = config or DefaultRAGConfig
         self.llm_config = self._resolve_llm_config(settings.llm, self.config.llm_override)
         
@@ -101,7 +101,6 @@ class RAGService:
             if self.config.reranker.type == "siliconflow":
                 from app.rag.rerankers.siliconflow_reranker import SiliconFlowReranker
                 self.reranker = SiliconFlowReranker(self.config.reranker)
-                logger.info("SiliconFlow Reranker initialized.")
             else:
                 logger.warning(f"Reranker type '{self.config.reranker.type}' not recognized. Reranking disabled.")
 
@@ -127,9 +126,9 @@ class RAGService:
                 vector_password=self.config.cache.vector_password,
                 vector_secure=self.config.cache.vector_secure,
             )
-            logger.info("Cache manager initialized.")
+            logger.info("Cache manager enabled")
         else:
-            logger.info("Caching is disabled.")
+            logger.info("Caching disabled")
 
         self._query_planner = QueryPlanner(
             generation_module=self.generation_module,
@@ -147,13 +146,13 @@ class RAGService:
         )
 
         self._initialized = True
-        logger.info("RAGService initialized successfully with multiple knowledge bases.")
+        logger.info("RAGService initialized")
 
     def _load_knowledge_bases(self):
         """
         Loads data, creates embeddings, and sets up retrievers for all configured sources.
         """
-        logger.info("Loading all knowledge bases...")
+        logger.info("Loading knowledge bases")
         embeddings = get_embedding_model(self.config)
 
         # Define the mapping from source name to class and config
@@ -163,7 +162,6 @@ class RAGService:
         }
 
         for name, (source_class, source_config) in source_definitions.items():
-            logger.info(f"--- Loading source: {name} ---")
             
             # 1. Instantiate Data Source
             data_path = Path(self.config.paths.base_data_path) / source_config.path_suffix
@@ -209,7 +207,11 @@ class RAGService:
                 default_ranker_weights=self.config.retrieval.ranker_weights
             )
             self.retrieval_modules[name] = retrieval_module
-            logger.info(f"--- Source '{name}' loaded successfully. ---")
+            logger.info(
+                "source loaded name=%s chunks=%d",
+                name,
+                len(child_chunks),
+            )
 
     # =========================================================================
     # Public API - Two main interfaces
@@ -238,7 +240,7 @@ class RAGService:
         if not self.retrieval_modules:
             raise RuntimeError("RAG Service is not properly initialized.")
 
-        logger.info(f"Performing RAG retrieval for query: {query[:50]}...")
+        logger.info("retrieval start query='%s'", query[:80])
 
         # Query planning (rewrite + metadata extraction)
         plan = self._query_planner.prepare(query, self.metadata_catalog)
@@ -264,7 +266,24 @@ class RAGService:
         # Extract sources for frontend display
         sources = self._extract_sources(processed_docs)
         
-        logger.info(f"Retrieved {len(processed_docs)} documents for query")
+        doc_summaries: List[Dict[str, Optional[str | float]]] = []
+        for doc in processed_docs:
+            meta = doc.metadata or {}
+            doc_summaries.append(
+                {
+                    "dish_name": meta.get("dish_name"),
+                    "difficulty": meta.get("difficulty"),
+                    "category": meta.get("category"),
+                    "retrieval_score": meta.get("retrieval_score"),
+                    "rerank_score": meta.get("rerank_score"),
+                }
+            )
+
+        logger.info(
+            "retrieval docs total=%d sample=%s",
+            len(processed_docs),
+            doc_summaries[:5],
+        )
         
         return RetrievalResult(
             original_query=query,
@@ -335,7 +354,7 @@ class RAGService:
 
     def _rerank_if_needed(self, rewritten_query: str, docs_for_rerank):
         if self.reranker and self.config.reranker.enabled:
-            logger.info(f"Reranking {len(docs_for_rerank)} documents...")
+            logger.info("reranking docs=%d", len(docs_for_rerank))
             return self.reranker.rerank(rewritten_query, docs_for_rerank)
         return docs_for_rerank
 
@@ -378,7 +397,7 @@ class RAGService:
                 seen.add(key)
                 sources.append(source_info)
         
-        return sources[:5]  # Limit to top 5 sources
+        return sources
 
 
 # Instantiate the singleton service

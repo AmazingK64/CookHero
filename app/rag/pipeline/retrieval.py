@@ -39,7 +39,7 @@ class RetrievalOptimizationModule:
         self.default_ranker_type = default_ranker_type
         self.default_ranker_weights = default_ranker_weights
         
-        logger.info(f"Retrieval optimization module initialized with Milvus hybrid search")
+        logger.info("Retrieval module initialized with Milvus hybrid search")
         
     def hybrid_search(
         self, 
@@ -69,8 +69,12 @@ class RetrievalOptimizationModule:
         ranker_weights = ranker_weights or self.default_ranker_weights
         score_threshold = score_threshold if score_threshold is not None else self.score_threshold
         
-        logger.info(f"Performing Milvus hybrid search for query: '{query}'")
-        logger.info(f"Parameters: top_k={top_k}, ranker_type={ranker_type}, weights={ranker_weights}, threshold={score_threshold}")
+        logger.info(
+            "hybrid search top_k=%d ranker=%s threshold=%s",
+            top_k,
+            ranker_type,
+            score_threshold,
+        )
         
         # Prepare ranker parameters
         ranker_params = {"norm_score": True}
@@ -93,7 +97,7 @@ class RetrievalOptimizationModule:
             docs.append(doc)
             scores.append(score)
         
-        logger.info(f"Retrieved {len(docs)} documents from hybrid search (before filtering)")
+        logger.info("hybrid search docs=%d", len(docs))
         
         # Apply score threshold filtering
         if score_threshold > 0 and ranker_type == "weighted":
@@ -103,8 +107,12 @@ class RetrievalOptimizationModule:
                 filtered_docs.append(doc)
                 filtered_scores.append(score)
             
-            logger.info("=" * 60)
-            logger.info(f"Score filtering: {len(docs)} → {len(filtered_docs)} documents (threshold: {score_threshold})")
+            logger.info(
+                "score filtering %d -> %d (threshold=%s)",
+                len(docs),
+                len(filtered_docs),
+                score_threshold,
+            )
             
             return filtered_docs, filtered_scores
         
@@ -126,7 +134,7 @@ class RetrievalOptimizationModule:
         # Keyword-heavy queries (with specific terms) → favor BM25
         keyword_indicators = ["怎么做", "如何", "步骤", "方法", "做法", "recipe", "how to"]
         if any(indicator in query_lower for indicator in keyword_indicators):
-            logger.info(f"Query contains keyword indicators, using weighted ranker with BM25 bias")
+            logger.debug("keyword indicators detected; weighted ranker BM25 bias")
             return "weighted", [0.4, 0.6]  # Favor sparse/BM25
         
         # Semantic/conceptual queries → favor dense embeddings
@@ -136,7 +144,7 @@ class RetrievalOptimizationModule:
             "recommend", "similar", "suggest", "what", "which",
         ]
         if any(indicator in query_lower for indicator in semantic_indicators):
-            logger.info(f"Query contains semantic indicators, using weighted ranker with dense bias")
+            logger.debug("semantic indicators detected; weighted ranker dense bias")
             return "weighted", [0.6, 0.4]  # Favor dense/semantic
         
         # Balanced queries

@@ -78,7 +78,7 @@ class RetrievalExecutor:
                 metadata_expression=metadata_expression,
             )
             all_retrieved_docs.extend(docs)
-        logger.info("--- Aggregated %d documents from all sources ---", len(all_retrieved_docs))
+        logger.info("aggregated retrieved docs=%d", len(all_retrieved_docs))
         return all_retrieved_docs
 
     def _retrieve_from_single_source(
@@ -90,7 +90,7 @@ class RetrievalExecutor:
         use_intelligent_ranker: bool,
         metadata_expression: Optional[str],
     ) -> List[Document]:
-        logger.info("Retrieving from source: %s", source_name)
+        logger.info("retrieving source=%s", source_name)
         cached_docs: Optional[List[Document]] = None
         if self._cache_manager:
             cached_docs = self._cache_manager.get(
@@ -148,13 +148,26 @@ class RetrievalExecutor:
         final_docs = list(unique_docs.values())
         final_docs.sort(key=lambda d: d.metadata.get("retrieval_score", 0.0), reverse=True)
 
-        # Log each document with its score
+        summaries = []
         for i, doc in enumerate(final_docs):
-            score = doc.metadata.get("retrieval_score", 0.0)
-            logger.info("=" * 60)
-            logger.info(f"Final Rank #{i+1} | Score: {score:.4f} | Doc ID: {doc.id}")
-            logger.info(f"Metadata: {doc.metadata}")
-            logger.info(f"Content preview: {doc.page_content[:10]}...")
+            meta = doc.metadata or {}
+            summaries.append(
+                {
+                    "rank": i + 1,
+                    "dish_name": meta.get("dish_name"),
+                    "difficulty": meta.get("difficulty"),
+                    "category": meta.get("category"),
+                    "retrieval_score": meta.get("retrieval_score"),
+                    "rerank_score": meta.get("rerank_score"),
+                }
+            )
+
+        logger.info(
+            "source=%s docs=%d sample=%s",
+            source_name,
+            len(final_docs),
+            summaries[:5],
+        )
 
         if self._cache_manager:
             self._cache_manager.set(
