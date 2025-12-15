@@ -21,6 +21,15 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
+const waitForAnimationFrame = () =>
+  new Promise<void>((resolve) => {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+
 export function useConversation() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>();
@@ -72,12 +81,12 @@ export function useConversation() {
     };
     setMessages(prev => [...prev, userMessage]);
 
-    // Create assistant message placeholder
+    // Create assistant message placeholder (no content until LLM starts streaming)
     const assistantMessageId = generateId();
     const assistantMessage: Message = {
       id: assistantMessageId,
       role: 'assistant',
-      content: '🤔',
+      content: '',
       timestamp: new Date(),
       isStreaming: true,
     };
@@ -157,6 +166,8 @@ export function useConversation() {
             );
             break;
         }
+
+        await waitForAnimationFrame();
       }
     } catch (err) {
       console.error('Failed to send message:', err);
