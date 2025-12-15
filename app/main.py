@@ -1,18 +1,38 @@
 # app/main.py
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.api.v1.endpoints import chat, conversation
 from app.config import settings
+from app.database.session import init_db, close_db
 import logging
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager for startup/shutdown events."""
+    # Startup
+    logger.info("Initializing database...")
+    await init_db()
+    logger.info("Database initialized.")
+    yield
+    # Shutdown
+    logger.info("Closing database connections...")
+    await close_db()
+    logger.info("Database connections closed.")
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="The backend API for the CookHero intelligent dietary assistant.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # CORS middleware for frontend development

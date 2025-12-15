@@ -10,7 +10,7 @@ from app.conversation import (
     LLMOrchestrator,
     Message,
     QueryRewriter,
-    conversation_store,
+    conversation_repository,
 )
 from app.services.rag_service import rag_service_instance
 
@@ -67,15 +67,22 @@ class ConversationService:
         - {"type": "sources", "data": [...]} - RAG sources (if any)
         - {"type": "done", "conversation_id": "..."} - Completion signal
         """
-        conversation = conversation_store.get_or_create(conversation_id)
+        # Get or create conversation in database
+        conversation = await conversation_repository.get_or_create(conversation_id)
+        conv_id = str(conversation.id)
         
-        # Add user message to history
-        user_message = Message(role="user", content=message)
-        conversation_store.add_message(conversation, user_message)
-        self.context_manager.trim_history(conversation, max_messages=100)
+        # Add user message to database
+        await conversation_repository.add_message(
+            conversation_id=conv_id,
+            role="user",
+            content=message,
+        )
+        
+        # Load recent history from database for context
+        history = await conversation_repository.get_history(conv_id, limit=100) or []
         
         # Detect intent using preformatted history
-        history_text = self.context_manager.build_history_text(conversation)
+        history_text = self.context_manager.build_history_text_from_dicts(history)
         intent_result: IntentDetectionResult = self.intent_detector.detect(
             message, history_text
         )
@@ -97,7 +104,6 @@ class ConversationService:
             yield emit_thinking("正在分析你的问题并检索 CookHero 知识库...")
             
             try:
-                # Build chat history for query rewriting
                 # Rewrite query with chat history context
                 rewritten_query = self.query_rewriter.rewrite_with_history(
                     message, history_text
@@ -120,8 +126,8 @@ class ConversationService:
                     retrieval_result.context,
                     rewritten_query
                 )
-                messages_for_llm = self.context_manager.build_llm_messages(
-                    conversation, extra_system_prompt=context_prompt
+                messages_for_llm = self.context_manager.build_llm_messages_from_dicts(
+                    history, extra_system_prompt=context_prompt
                 )
                 async for chunk in self.llm_orchestrator.stream(messages_for_llm):
                     full_response += chunk
@@ -131,30 +137,30 @@ class ConversationService:
                 logger.error(f"RAG error: {e}", exc_info=True)
                 yield emit_thinking("检索遇到问题，改为直接回答你的问题。")
                 # Fallback to direct LLM
-                messages_for_llm = self.context_manager.build_llm_messages(conversation)
+                messages_for_llm = self.context_manager.build_llm_messages_from_dicts(history)
                 async for chunk in self.llm_orchestrator.stream(messages_for_llm):
                     full_response += chunk
                     yield f"data: {json.dumps({'type': 'text', 'content': chunk})}\n\n"
         else:
             # Direct LLM conversation
             logger.info(f"Using direct LLM for query: {message}")
-            messages_for_llm = self.context_manager.build_llm_messages(conversation)
+            messages_for_llm = self.context_manager.build_llm_messages_from_dicts(history)
             async for chunk in self.llm_orchestrator.stream(messages_for_llm):
                 full_response += chunk
                 yield f"data: {json.dumps({'type': 'text', 'content': chunk})}\n\n"
         
-        # Add assistant response to history
-        assistant_message = Message(
+        # Add assistant response to database
+        await conversation_repository.add_message(
+            conversation_id=conv_id,
             role="assistant",
             content=full_response,
             sources=sources if sources else None,
             intent=intent_result.intent.value,
-            thinking=thinking_steps if thinking_steps else None
+            thinking=thinking_steps if thinking_steps else None,
         )
-        conversation_store.add_message(conversation, assistant_message)
         
         # Yield completion signal
-        yield f"data: {json.dumps({'type': 'done', 'conversation_id': conversation.id})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'conversation_id': conv_id})}\n\n"
 
     def _build_rag_context_prompt(self, context: str, rewritten_query: str) -> str:
         """Construct the system prompt that injects retrieved context for generation."""
@@ -166,17 +172,17 @@ class ConversationService:
             f"【检索到的参考内容】\n{sanitized_context}"
         )
     
-    def get_conversation_history(self, conversation_id: str) -> Optional[List[Dict]]:
+    async def get_conversation_history(self, conversation_id: str) -> Optional[List[Dict]]:
         """Get conversation history."""
-        return conversation_store.get_history(conversation_id)
+        return await conversation_repository.get_history(conversation_id)
     
-    def clear_conversation(self, conversation_id: str) -> bool:
+    async def clear_conversation(self, conversation_id: str) -> bool:
         """Clear a conversation."""
-        return conversation_store.clear(conversation_id)
+        return await conversation_repository.clear(conversation_id)
 
-    def list_conversations(self) -> list[dict]:
+    async def list_conversations(self, user_id: Optional[str] = None) -> list[dict]:
         """List all conversations with basic metadata for UI switching."""
-        return conversation_store.list_conversations()
+        return await conversation_repository.list_conversations(user_id=user_id)
 
 
 # Singleton instance

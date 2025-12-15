@@ -149,7 +149,7 @@ async def get_conversation_history(conversation_id: str):
     }
     ```
     """
-    history = conversation_service.get_conversation_history(conversation_id)
+    history = await conversation_service.get_conversation_history(conversation_id)
     
     if history is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -168,7 +168,7 @@ async def clear_conversation(conversation_id: str):
     **Parameters:**
     - `conversation_id`: The ID of the conversation to delete
     """
-    success = conversation_service.clear_conversation(conversation_id)
+    success = await conversation_service.clear_conversation(conversation_id)
     
     if not success:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -178,6 +178,6 @@ async def clear_conversation(conversation_id: str):
 
 @router.get("/conversation")
 async def list_conversations() -> list[ConversationSummary]:
-    """List all conversations for the current user (in-memory store)."""
-    conversations = conversation_service.list_conversations()
+    """List all conversations for the current user (PostgreSQL store)."""
+    conversations = await conversation_service.list_conversations()
     return [ConversationSummary(**c) for c in conversations]
