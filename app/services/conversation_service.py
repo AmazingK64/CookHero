@@ -96,7 +96,7 @@ class ConversationService:
         
         # Detect intent using preformatted history
         history_text = self.context_manager.build_history_text_from_dicts(history)
-        print(history_text)
+        # print(history_text)
         intent_result: IntentDetectionResult = self.intent_detector.detect(
             message, history_text
         )
