@@ -113,7 +113,7 @@ class ConversationService:
         # Yield intent detection result with more details
         yield emit_thinking(f"🔍 意图识别完成: {intent_result.intent.value}")
         yield emit_thinking(f"📋 是否需要检索: {'是' if intent_result.need_rag else '否'}")
-        yield emit_thinking(f"💭 判断依据: {intent_result.reason[:100]}...")
+        yield emit_thinking(f"💭 判断依据: {intent_result.reason}")
         
         logger.info(
             "chat route need_rag=%s intent=%s reason=%s history_len=%d",
@@ -147,12 +147,13 @@ class ConversationService:
                     yield emit_thinking(f"📚 检索到 {doc_count} 条相关资料")
                     # Show brief info about retrieved documents
                     for i, doc in enumerate(retrieval_result.documents[:3]):  # Show top 3
-                        doc_title = doc.metadata.get('title', doc.metadata.get('source', '未知来源'))
-                        doc_preview = doc.page_content[:50].replace('\n', ' ') + "..."
-                        yield emit_thinking(f"  📄 [{i+1}] {doc_title}: {doc_preview}")
+                        doc_title = doc.metadata.get('dish_name', '')
+                        doc_difficulty = doc.metadata.get('difficulty', '')
+                        doc_category = doc.metadata.get('category', '')
+                        doc_preview = doc.page_content[:200].replace('\n', ' ') + ('...' if len(doc.page_content) > 200 else '')
+                        yield emit_thinking(f"  📄 [{i+1}] {doc_title} (难度: {doc_difficulty}, 分类: {doc_category}): {doc_preview}")
                     if doc_count > 3:
                         yield emit_thinking(f"  ...还有 {doc_count - 3} 条资料")
-                    yield emit_thinking("📝 正在组织回答...")
                 else:
                     yield emit_thinking("⚠️ 知识库里没有找到直接相关的资料，将结合常识为你回答。")
                 
