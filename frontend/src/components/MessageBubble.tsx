@@ -3,7 +3,7 @@
  * Message bubble component for displaying chat messages
  */
 
-import { Search, MessageCircle, Loader2 } from 'lucide-react';
+import { Search, MessageCircle } from 'lucide-react';
 import type { Message } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ThinkingBlock } from './ThinkingBlock';
