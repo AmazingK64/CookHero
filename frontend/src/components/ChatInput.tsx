@@ -53,7 +53,7 @@ export function ChatInput({ onSend, disabled = false, placeholder = 'Type a mess
           onChange={handleInput}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          disabled={disabled}
+        //   disabled={disabled}
           rows={1}
           className="flex-1 max-h-[200px] py-2 px-2 bg-transparent border-none focus:ring-0 resize-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 text-sm leading-relaxed scrollbar-hide"
         />
