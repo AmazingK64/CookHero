@@ -39,8 +39,6 @@ embedding:
 # ----------------------------------------------------------------------------
 vector_store:
   type: "milvus"
-  host: "localhost"
-  port: 19530
   collection_names:
     recipes: "cook_hero_recipes"
     tips: "cook_hero_tips"
@@ -79,18 +77,14 @@ reranker:
 # Does NOT cache: LLM responses
 cache:
   enabled: true
-  # Redis (L1 cache)
-  redis_host: "localhost"
-  redis_port: 6379
-  redis_db: 0
-  # redis_password: loaded from .env (REDIS_PASSWORD)
+  # TTL and high-level cache settings. Connection details are moved to
+  # the `database.redis` and `database.milvus` sections below.
   # Cache TTL (applies to both L1 and L2)
   ttl: 3600  # 1 hour
   # L2 semantic cache
   l2_enabled: true
   similarity_threshold: 0.92
-  vector_host: "localhost"
-  vector_port: 19530
+  vector_collection: "cookhero_retrieval_cache"
   vector_collection: "cookhero_retrieval_cache"
   # vector_user/vector_password: loaded from .env
 
@@ -98,16 +92,32 @@ cache:
 # Database (PostgreSQL)
 # ----------------------------------------------------------------------------
 database:
-  host: "localhost"
-  port: 5432
-  database: "cookhero"
-  user: "cookhero"
-  # password: loaded from .env (DATABASE_PASSWORD)
-  pool_size: 5
-  max_overflow: 10
-  pool_timeout: 30
-  pool_recycle: 1800
-  echo: false
+  # PostgreSQL primary database
+  postgres:
+    host: "localhost"
+    port: 5432
+    database: "cookhero"
+    user: "cookhero"
+    # password: loaded from .env (DATABASE_PASSWORD)
+    pool_size: 5
+    max_overflow: 10
+    pool_timeout: 30
+    pool_recycle: 1800
+    echo: false
+
+  # Redis (L1 cache) connection details
+  redis:
+    host: "localhost"
+    port: 6379
+    db: 0
+    # password: loaded from .env (REDIS_PASSWORD)
+
+  # Milvus (vector database) connection details
+  milvus:
+    host: "localhost"
+    port: 19530
+    # user/password: loaded from .env (MILVUS_USER / MILVUS_PASSWORD)
+    # secure: false
 
 # ----------------------------------------------------------------------------
 # Data Sources
