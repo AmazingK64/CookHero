@@ -120,17 +120,6 @@ class ConversationService:
             compressed_summary=compressed_summary,
         )
 
-        # check if the file debug_history.txt exists, if not create it
-        if not os.path.exists("./debug_history.txt"):
-            with open("./debug_history.txt", "w") as f:
-                f.write("")
-        with open("./debug_history.txt", "a") as f:
-            f.write(f"--- New Interaction ---\n")
-            f.write(f"Total History Messages: {len(history_dicts)}\n")
-            f.write(f"Compressed Count: {compressed_count}\n")
-            f.write(f"User Message:\n{message}\n")
-            f.write(f"History Text:\n{history_text}\n\n\n")
-
         # Detect intent
         intent_result: IntentDetectionResult = self.intent_detector.detect(
             message, history_text
