@@ -17,6 +17,8 @@ function ConversationPage() {
     messages,
     conversationId,
     conversations,
+    totalConversations,
+    hasMoreConversations,
     isLoading,
     isStreaming,
     error,
@@ -24,6 +26,9 @@ function ConversationPage() {
     selectConversation,
     clearMessages,
     stopGeneration,
+    removeConversation,
+    renameConversation,
+    loadMoreConversations,
   } = useConversation(token || undefined);
 
   const { isDark, toggleTheme } = useTheme();
@@ -63,9 +68,14 @@ function ConversationPage() {
         isOpen={isSidebarOpen}
         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         conversations={conversations}
+        totalConversations={totalConversations}
+        hasMoreConversations={hasMoreConversations}
+        onLoadMoreConversations={loadMoreConversations}
         currentConversationId={conversationId || null}
         onSelectConversation={handleSelectConversation}
         onNewChat={handleNewChat}
+        onDeleteConversation={removeConversation}
+        onRenameConversation={renameConversation}
         isDark={isDark}
         toggleTheme={toggleTheme}
       />
