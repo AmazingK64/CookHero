@@ -1,17 +1,32 @@
 # Global Instructions
 
+## 0. General Code Quality Requirements
+- Clarity and Simplicity: Write clean, self-documenting code with meaningful names and consistent formatting. Prefer straightforward solutions; avoid unnecessary abstraction or complexity.
+- Reliability and Correctness: Ensure code is robust and predictable. Handle errors gracefully, validate inputs, and include tests where appropriate.
+- Maintainability and Modularity: Structure code to be easy to understand, modify, and extend. Minimize coupling between modules and keep related functionality cohesive.
+- Consistency and Standards: Follow established project conventions and language best practices consistently. Avoid introducing special cases without strong justification.
+
 ## 1. Task Decomposition & Planning
-- For multiple or complex tasks, think through and analyze carefully first
-- Create a to-do list breaking down tasks into executable steps
-- Process each subtask sequentially by priority
+- For complex or multi-step tasks, carefully analyze and plan before proceeding.
+- Break down tasks into a prioritized to-do list of executable steps.
+- Process each subtask sequentially by priority, ensuring logical progression and clarity.
 
-## 2. Git Operations
-- **Never execute git commit automatically** after code changes
-- Only perform git operations when explicitly instructed by user
+## 2. Version Compatibility Policy
+- **No backward compatibility guarantee** — Feel free to break old formats to prioritize new features and improvements.
+- Allow destructive updates, prioritize code quality and architectural soundness over maintaining legacy support.
 
-## 3. Python Environment
-- Always activate the virtual environment in project root before running/testing code
+## 3. Git Operations
+- **Never automatically execute git commit** after making code changes.
+- Perform git operations (e.g., commit, push) only when explicitly instructed by the user.
+
+# Python Project Instructions
+
+## 1. Python Environment Management
+- Always activate the virtual environment in the project root before running or testing code.
 - Activation command: `source .venv/bin/activate`
 
-## 4. Frontend Build
-- After modifying frontend code, run the following command to compile and check for errors: `npm run build`
+# Frontend Project Instructions
+
+## 1. Frontend Build Process
+- After modifying frontend code, always run the following command to compile and check for errors: `npm run build`.
+- Ensure the build succeeds before proceeding with other operations to maintain code consistency and stability.

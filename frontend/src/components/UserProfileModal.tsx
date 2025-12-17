@@ -168,7 +168,7 @@ export default function UserProfileModal({ open, onClose }: Props) {
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">个性化</p>
                   <h4 className="text-xl font-semibold text-gray-900 dark:text-gray-50">外观</h4>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">切换浅色 / 深色主题，后续也可扩展更多外观选项。</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">切换浅色 / 深色主题，后续将扩展更多外观选项。</p>
                 </div>
 
                 <div className="mt-4 flex items-center justify-between gap-4">
