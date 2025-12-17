@@ -80,6 +80,11 @@ class ConversationModel(Base):
     title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # Metadata for extensibility (e.g., tags, preferences)
     metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSON, nullable=True)
+    
+    # Compressed context summary for older messages
+    compressed_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Number of messages included in the compressed summary
+    compressed_message_count: Mapped[int] = mapped_column(default=0, nullable=False)
 
     # Relationship to messages
     messages: Mapped[List["MessageModel"]] = relationship(
@@ -105,6 +110,8 @@ class ConversationModel(Base):
             "last_message_preview": (
                 self.messages[-1].content[:80] if self.messages else None
             ),
+            "compressed_summary": self.compressed_summary,
+            "compressed_message_count": self.compressed_message_count,
         }
 
 

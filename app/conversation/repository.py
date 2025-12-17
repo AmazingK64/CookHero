@@ -197,6 +197,88 @@ class ConversationRepository:
             result = await session.execute(stmt)
             return result.scalar_one_or_none()
 
+    async def get_compressed_summary(
+        self, conversation_id: str
+    ) -> tuple[Optional[str], int]:
+        """
+        Get the compressed summary and count for a conversation.
+        
+        Returns:
+            Tuple of (compressed_summary, compressed_message_count)
+        """
+        async with get_session_context() as session:
+            try:
+                conv_uuid = uuid.UUID(conversation_id)
+            except ValueError:
+                return None, 0
+
+            stmt = select(
+                ConversationModel.compressed_summary,
+                ConversationModel.compressed_message_count,
+            ).where(ConversationModel.id == conv_uuid)
+            
+            result = await session.execute(stmt)
+            row = result.one_or_none()
+            
+            if row:
+                return row[0], row[1]
+            return None, 0
+
+    async def update_compressed_summary(
+        self,
+        conversation_id: str,
+        summary: str,
+        message_count: int,
+    ) -> bool:
+        """
+        Update the compressed summary for a conversation.
+        
+        Args:
+            conversation_id: The conversation ID
+            summary: The new compressed summary
+            message_count: Number of messages included in the summary
+            
+        Returns:
+            True if update was successful
+        """
+        async with get_session_context() as session:
+            try:
+                conv_uuid = uuid.UUID(conversation_id)
+            except ValueError:
+                return False
+
+            stmt = select(ConversationModel).where(ConversationModel.id == conv_uuid)
+            result = await session.execute(stmt)
+            conversation = result.scalar_one_or_none()
+
+            if not conversation:
+                return False
+
+            conversation.compressed_summary = summary
+            conversation.compressed_message_count = message_count
+            await session.flush()
+            
+            logger.info(
+                "Updated compressed summary for conversation %s (messages: %d)",
+                conversation_id,
+                message_count,
+            )
+            return True
+
+    async def get_message_count(self, conversation_id: str) -> int:
+        """Get the total number of messages in a conversation."""
+        async with get_session_context() as session:
+            try:
+                conv_uuid = uuid.UUID(conversation_id)
+            except ValueError:
+                return 0
+
+            stmt = select(func.count(MessageModel.id)).where(
+                MessageModel.conversation_id == conv_uuid
+            )
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
 
 # Singleton instance
 conversation_repository = ConversationRepository()
