@@ -3,8 +3,9 @@
 Conversation API endpoints for multi-turn chat with RAG integration.
 """
 
+import asyncio
 import logging
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -62,15 +63,31 @@ async def conversation(request: ConversationRequest, http_request: Request):
     """
     logger.info(f"Received conversation request: '{request.message[:50]}...'")
     
+    async def stream_with_disconnect_detection() -> AsyncGenerator[str, None]:
+        """Wrapper generator that detects client disconnection."""
+        try:
+            async for chunk in conversation_service.chat(
+                message=request.message,
+                conversation_id=request.conversation_id,
+                user_id=getattr(http_request.state, "user_id", None),
+                stream=True,
+            ):
+                # Check if client is still connected
+                if await http_request.is_disconnected():
+                    logger.info("Client disconnected, stopping stream")
+                    break
+                yield chunk
+        except asyncio.CancelledError:
+            logger.info("Stream cancelled by client")
+            raise
+        except Exception as e:
+            logger.error(f"Stream error: {e}", exc_info=True)
+            raise
+    
     try:
         if request.stream:
             return StreamingResponse(
-                conversation_service.chat(
-                    message=request.message,
-                    conversation_id=request.conversation_id,
-                    user_id=getattr(http_request.state, "user_id", None),
-                    stream=True,
-                ),
+                stream_with_disconnect_detection(),
                 media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
