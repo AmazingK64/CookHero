@@ -66,6 +66,10 @@ ALTER TABLE users
 -- Optional: index on occupation for filtering
 CREATE INDEX IF NOT EXISTS ix_users_occupation ON users(occupation);
 
+ALTER TABLE conversations
+    ADD COLUMN IF NOT EXISTS compressed_summary TEXT,
+    ADD COLUMN IF NOT EXISTS compressed_message_count INT DEFAULT 0 NOT NULL;
+
 -- Grant permissions (if using different roles)
 -- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO cookhero;
 -- GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO cookhero;
