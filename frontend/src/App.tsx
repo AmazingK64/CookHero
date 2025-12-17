@@ -18,14 +18,17 @@ function ConversationPage() {
     conversationId,
     conversations,
     isLoading,
+    isStreaming,
     error,
     sendMessage,
     selectConversation,
     clearMessages,
+    stopGeneration,
   } = useConversation(token || undefined);
 
   const { isDark, toggleTheme } = useTheme();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [suggestionText, setSuggestionText] = useState<string>('');
 
   const handleNewChat = () => {
     clearMessages();
@@ -44,6 +47,14 @@ function ConversationPage() {
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const handleSuggestionClick = (text: string) => {
+    setSuggestionText(text);
+  };
+
+  const handleSuggestionConsumed = () => {
+    setSuggestionText('');
   };
 
   return (
@@ -103,13 +114,17 @@ function ConversationPage() {
             </div>
           )}
           
-          <ChatWindow messages={messages} isLoading={isLoading} />
+          <ChatWindow messages={messages} isLoading={isLoading} onSuggestionClick={handleSuggestionClick} />
           
           <div className="p-4 max-w-4xl w-full mx-auto">
              <ChatInput
                 onSend={sendMessage}
+                onCancel={stopGeneration}
                 disabled={isLoading}
+                isStreaming={isStreaming}
                 placeholder="Ask CookHero anything about cooking..."
+                externalValue={suggestionText}
+                onExternalValueConsumed={handleSuggestionConsumed}
               />
               <div className="text-center text-xs text-gray-400 mt-2">
                 CookHero can make mistakes. Consider checking important information.

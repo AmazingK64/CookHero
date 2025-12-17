@@ -11,9 +11,10 @@ import { MessageBubble } from './MessageBubble';
 interface ChatWindowProps {
   messages: Message[];
   isLoading: boolean;
+  onSuggestionClick?: (text: string) => void;
 }
 
-export function ChatWindow({ messages, isLoading }: ChatWindowProps) {
+export function ChatWindow({ messages, isLoading, onSuggestionClick }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -22,7 +23,7 @@ export function ChatWindow({ messages, isLoading }: ChatWindowProps) {
   }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-950">
+    <div className={`flex-1 p-4 md:p-6 scroll-smooth bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-950 ${messages.length === 0 ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
       {messages.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 animate-in fade-in duration-500">
           {/* Hero Section */}
@@ -63,10 +64,10 @@ export function ChatWindow({ messages, isLoading }: ChatWindowProps) {
           
           {/* Suggestion Chips */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
-            <SuggestionChip text="红烧肉怎么做？" emoji="🥩" />
-            <SuggestionChip text="鸡蛋和西红柿能做什么？" emoji="🍳" />
-            <SuggestionChip text="推荐一道健康晚餐" emoji="🥗" />
-            <SuggestionChip text="如何让炒菜更香？" emoji="✨" />
+            <SuggestionChip text="红烧肉怎么做？" emoji="🥩" onClick={onSuggestionClick} />
+            <SuggestionChip text="鸡蛋和西红柿能做什么？" emoji="🥚" onClick={onSuggestionClick} />
+            <SuggestionChip text="推荐一道健康晚餐" emoji="🥗" onClick={onSuggestionClick} />
+            <SuggestionChip text="如何让炒菜更香？" emoji="✨" onClick={onSuggestionClick} />
           </div>
         </div>
       ) : (
@@ -106,18 +107,11 @@ function FeatureCard({ icon, title, description }: { icon: React.ReactNode; titl
   );
 }
 
-function SuggestionChip({ text, emoji }: { text: string; emoji: string }) {
+function SuggestionChip({ text, emoji, onClick }: { text: string; emoji: string; onClick?: (text: string) => void }) {
   return (
     <button
       className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-left hover:border-orange-300 dark:hover:border-orange-700 hover:shadow-md transition-all duration-200 text-gray-700 dark:text-gray-300 group"
-      onClick={() => {
-        const input = document.querySelector('textarea');
-        if (input) {
-          input.value = text;
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          input.focus();
-        }
-      }}
+      onClick={() => onClick?.(text)}
     >
       <span className="text-xl group-hover:scale-110 transition-transform">{emoji}</span>
       <span>{text}</span>
