@@ -1,11 +1,23 @@
 // src/components/index.ts
 /**
- * Component exports
+ * Components - Central export
  */
 
-export { ChatInput } from './ChatInput';
-export { ChatWindow } from './ChatWindow';
-export { Header } from './Header';
-export { MessageBubble } from './MessageBubble';
-export { MarkdownRenderer } from './MarkdownRenderer';
-export { Sidebar } from './Sidebar';
+// Common components
+export * from './common';
+
+// Chat components
+export * from './chat';
+
+// Layout components
+export * from './layout';
+
+// Legacy exports for backward compatibility
+// These can be removed once all imports are updated
+export { ChatInput } from './chat';
+export { ChatWindow } from './chat';
+export { MessageBubble } from './chat';
+export { MarkdownRenderer } from './chat';
+export { Header } from './layout';
+export { Sidebar } from './layout';
+

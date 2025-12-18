@@ -1,15 +1,28 @@
-// src/components/MessageBubble.tsx
 /**
- * Message bubble component for displaying chat messages
+ * Message Bubble Component
+ * Displays individual chat messages with styling based on role
  */
 
 import { Search, MessageCircle } from 'lucide-react';
-import type { Message } from '../types';
+import type { Message } from '../../types';
+import { INTENT_LABELS } from '../../constants';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ThinkingBlock } from './ThinkingBlock';
 
-interface MessageBubbleProps {
+export interface MessageBubbleProps {
   message: Message;
+}
+
+/**
+ * Extract intent string from message.intent
+ */
+function extractIntent(intent: Message['intent']): string | undefined {
+  if (!intent) return undefined;
+  if (typeof intent === 'string') return intent;
+  if (typeof intent === 'object' && 'intent' in intent) {
+    return (intent as { intent: string }).intent;
+  }
+  return undefined;
 }
 
 export function MessageBubble({ message }: MessageBubbleProps) {
@@ -19,28 +32,16 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const hasThinkingSteps = thinkingSteps.length > 0;
   const isThinkingPhase = !isUser && !!message.isStreaming && !hasText;
   const showThinkingBlock = !isUser && (hasThinkingSteps || isThinkingPhase);
-  // message.intent may be a string (e.g. 'recipe_search') or an object (legacy).
-  const rawIntent: string | undefined = (() => {
-    if (!message.intent) return undefined;
-    if (typeof message.intent === 'string') return message.intent;
-    if (typeof message.intent === 'object' && 'intent' in message.intent) return (message.intent as any).intent;
-    return undefined;
-  })();
-
-  const intentLabelMap: Record<string, string> = {
-    recipe_search: '菜谱搜索',
-    cooking_tips: '烹饪技巧',
-    ingredient_info: '食材信息',
-    recommendation: '菜品推荐',
-    general_chat: '闲聊',
-  };
+  const rawIntent = extractIntent(message.intent);
 
   return (
     <div className={`flex mb-6 ${isUser ? 'justify-end' : 'justify-start'}`}>
-
-      {/* Content */}
-      <div className={`flex flex-col max-w-[85%] ${isUser ? 'items-end self-end' : 'items-start self-start'}`}>
-        {/* Intent Indicator (Assistant only, name removed) */}
+      <div
+        className={`flex flex-col max-w-[85%] ${
+          isUser ? 'items-end self-end' : 'items-start self-start'
+        }`}
+      >
+        {/* Intent Indicator (Assistant only) */}
         <div className="flex items-center gap-2 mb-1.5">
           {!isUser && rawIntent && (
             <div className="flex items-center">
@@ -52,7 +53,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               ) : (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium border border-green-200 dark:border-green-800">
                   <Search className="w-3 h-3" />
-                  {`知识库检索 · ${intentLabelMap[rawIntent] ?? rawIntent}`}
+                  {`知识库检索 · ${INTENT_LABELS[rawIntent] ?? rawIntent}`}
                 </span>
               )}
             </div>
@@ -62,24 +63,19 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {/* Thinking Block (Assistant only) */}
         {showThinkingBlock && (
           <div className="w-full mb-2">
-            <ThinkingBlock 
-              steps={thinkingSteps} 
-              isThinking={isThinkingPhase} 
-            />
+            <ThinkingBlock steps={thinkingSteps} isThinking={isThinkingPhase} />
           </div>
         )}
 
-        {/* Spinner placeholder before text is ready */}
-        {/* {!isUser && isThinkingPhase && (
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-2">
-            <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
-            <span>AI 正在准备回答...</span>
-          </div>
-        )} */}
-
         {/* Message Text (hide while only thinking) */}
-        {isThinkingPhase ? null : (
-          <div className={`text-sm leading-relaxed ${isUser ? 'bg-gradient-to-br from-blue-500 to-blue-500 text-white px-4 py-1 rounded-2xl shadow-sm' : 'prose prose-sm dark:prose-invert max-w-none text-gray-800 dark:text-gray-100 px-0 py-0'}`}>
+        {!isThinkingPhase && (
+          <div
+            className={`text-sm leading-relaxed ${
+              isUser
+                ? 'bg-gradient-to-br from-blue-500 to-blue-500 text-white px-4 py-1 rounded-2xl shadow-sm'
+                : 'prose prose-sm dark:prose-invert max-w-none text-gray-800 dark:text-gray-100 px-0 py-0'
+            }`}
+          >
             <MarkdownRenderer content={message.content.trim()} />
           </div>
         )}
@@ -87,14 +83,19 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {/* Sources (Assistant only) */}
         {!isUser && message.sources && message.sources.length > 0 && (
           <div className="mt-3 w-full">
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 font-medium">📚 参考来源：</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 font-medium">
+              📚 参考来源：
+            </p>
             <ul className="space-y-1">
               {message.sources.map((source, idx) => (
-                <li 
+                <li
                   key={idx}
                   className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0"
+                    aria-hidden="true"
+                  />
                   <span>{source.info}</span>
                 </li>
               ))}
@@ -103,7 +104,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         )}
 
         {/* Timestamp */}
-        <div className={`text-xs mt-2 ${isUser ? 'text-blue-200' : 'text-gray-400 dark:text-gray-500'}`}>
+        <div
+          className={`text-xs mt-2 ${
+            isUser ? 'text-blue-200' : 'text-gray-400 dark:text-gray-500'
+          }`}
+        >
           {message.timestamp.toLocaleTimeString('zh-CN', {
             hour: '2-digit',
             minute: '2-digit',

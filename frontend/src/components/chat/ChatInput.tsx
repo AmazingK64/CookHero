@@ -1,12 +1,12 @@
-// src/components/ChatInput.tsx
 /**
- * Chat input component with send button and cancel functionality
+ * Chat Input Component
+ * Text area with send button and cancel functionality for streaming
  */
 
 import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { SendHorizontal, Square } from 'lucide-react';
 
-interface ChatInputProps {
+export interface ChatInputProps {
   onSend: (message: string) => void;
   onCancel?: () => void;
   disabled?: boolean;
@@ -89,6 +89,7 @@ export function ChatInput({
             onClick={handleCancel}
             className="p-2 rounded-lg transition-all duration-200 bg-red-500 text-white hover:bg-red-600 shadow-sm"
             title="Stop generating"
+            aria-label="Stop generating"
           >
             <Square className="w-5 h-5" />
           </button>
@@ -103,6 +104,7 @@ export function ChatInput({
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
               }
             `}
+            aria-label="Send message"
           >
             <SendHorizontal className="w-5 h-5" />
           </button>

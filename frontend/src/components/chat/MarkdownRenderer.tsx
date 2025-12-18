@@ -1,6 +1,6 @@
-// src/components/MarkdownRenderer.tsx
 /**
- * Markdown renderer component using react-markdown
+ * Markdown Renderer Component
+ * Renders markdown content with syntax highlighting and custom styling
  */
 
 import ReactMarkdown from 'react-markdown';
@@ -11,8 +11,9 @@ import type { Components } from 'react-markdown';
 // Import highlight.js styles (GitHub Dark theme)
 import 'highlight.js/styles/github-dark.css';
 
-interface MarkdownRendererProps {
+export interface MarkdownRendererProps {
   content: string;
+  className?: string;
 }
 
 // Custom components for styling
@@ -103,11 +104,11 @@ const components: Components = {
   ),
 };
 
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   if (!content) return null;
 
   return (
-    <div className="markdown-content">
+    <div className={`markdown-content ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
