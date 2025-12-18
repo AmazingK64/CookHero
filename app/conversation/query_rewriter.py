@@ -103,7 +103,7 @@ class QueryRewriter:
             base_url=self.llm_config.base_url,
         )
 
-    def rewrite_with_history(
+    async def rewrite_with_history(
         self, current_query: str, history_text: str
     ) -> str:
         if not history_text.strip():
@@ -112,8 +112,8 @@ class QueryRewriter:
         try:
             chain = HISTORY_REWRITE_PROMPT | self.rewrite_llm | StrOutputParser()
             rewritten = (
-                chain.invoke({"history": history_text, "query": current_query}).strip()
-            )
+                await chain.ainvoke({"history": history_text, "query": current_query})
+            ).strip()
 
             if rewritten and rewritten != current_query:
                 logger.info(

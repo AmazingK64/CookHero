@@ -136,7 +136,7 @@ class IntentDetector:
         self.chain = INTENT_DETECTION_PROMPT | self.llm | StrOutputParser()
         logger.info("IntentDetector initialized")
 
-    def detect(
+    async def detect(
         self,
         query: str,
         history_text: Optional[str] = None,
@@ -150,7 +150,7 @@ class IntentDetector:
         history_str = history_text
 
         try:
-            response = self.chain.invoke({"query": query, "history": history_str})
+            response = await self.chain.ainvoke({"query": query, "history": history_str})
             content = response.strip()
 
             if content.startswith("```"):
