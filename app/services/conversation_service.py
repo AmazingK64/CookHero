@@ -157,7 +157,7 @@ class ConversationService:
         )
 
         # Detect intent
-        intent_result: IntentDetectionResult = self.intent_detector.detect(
+        intent_result: IntentDetectionResult = await self.intent_detector.detect(
             message, history_text
         )
         yield f"data: {json.dumps({'type': 'intent', 'data': {'need_rag': intent_result.need_rag, 'intent': intent_result.intent.value, 'reason': intent_result.reason}})}\n\n"
@@ -189,7 +189,7 @@ class ConversationService:
             
             try:
                 # Rewrite query with chat history context
-                rewritten_query = self.query_rewriter.rewrite_with_history(
+                rewritten_query = await self.query_rewriter.rewrite_with_history(
                     message, history_text
                 )
                 yield emit_thinking(f"✏️ 重写后的查询: {rewritten_query}")
@@ -197,7 +197,7 @@ class ConversationService:
                 yield emit_thinking("🔎 正在从 CookHero 知识库中检索相关资料...")
                 
                 # Retrieve context once and reuse for generation + sources
-                retrieval_result = rag_service_instance.retrieve(
+                retrieval_result = await rag_service_instance.retrieve(
                     rewritten_query,
                     skip_rewrite=True,
                 )

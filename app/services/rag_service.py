@@ -6,7 +6,7 @@ RAG Service - Orchestrates the RAG pipeline for knowledge retrieval and response
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Generator, List, Optional
+from typing import Dict, List, Optional
 
 from langchain_core.documents import Document
 
@@ -214,7 +214,7 @@ class RAGService:
     # Public API - Two main interfaces
     # =========================================================================
 
-    def retrieve(
+    async def retrieve(
         self, 
         query: str, 
         use_intelligent_ranker: bool = True,
@@ -241,14 +241,14 @@ class RAGService:
         logger.info("retrieval start query='%s'", query[:80])
 
         # Query planning (rewrite + metadata extraction)
-        plan = self._query_planner.prepare(
+        plan = await self._query_planner.prepare(
             query,
             self.metadata_catalog,
             skip_rewrite=skip_rewrite,
         )
         
         # Execute retrieval
-        all_retrieved_docs = self._retrieval_executor.retrieve(
+        all_retrieved_docs = await self._retrieval_executor.retrieve(
             plan.rewritten_query,
             self.config.retrieval.top_k,
             use_intelligent_ranker,
@@ -256,7 +256,7 @@ class RAGService:
         )
 
         # Rerank if enabled
-        reranked_docs = self._rerank_if_needed(plan.rewritten_query, all_retrieved_docs)
+        reranked_docs = await self._rerank_if_needed(plan.rewritten_query, all_retrieved_docs)
         
         # Post-process documents
         processed_docs = self._post_processor.process(reranked_docs)
@@ -295,13 +295,13 @@ class RAGService:
             sources=sources
         )
 
-    def ask_with_generation(
+    async def ask_with_generation(
         self, 
         query: str, 
         stream: bool = False, 
         use_intelligent_ranker: bool = True,
         skip_rewrite: bool = False,
-    ) -> str | Generator[str, None, None]:
+    ):
         """
         Full RAG pipeline: query rewriting + retrieval + LLM generation.
         
@@ -313,44 +313,40 @@ class RAGService:
             use_intelligent_ranker: Whether to use intelligent ranking
             
         Returns:
-            Generated response string or generator for streaming
+            Generated response string or async generator for streaming
         """
         if not all([self.retrieval_modules, self.generation_module, self.data_sources]):
             raise RuntimeError("RAG Service is not properly initialized.")
 
-        plan = self._query_planner.prepare(
+        plan = await self._query_planner.prepare(
             query,
             self.metadata_catalog,
             skip_rewrite=skip_rewrite,
         )
 
         retrieval_top_k = self.config.retrieval.top_k
-        all_retrieved_docs = self._retrieval_executor.retrieve(
+        all_retrieved_docs = await self._retrieval_executor.retrieve(
             plan.rewritten_query,
             retrieval_top_k,
             use_intelligent_ranker,
             plan.metadata_expression,
         )
 
-        reranked_docs = self._rerank_if_needed(plan.rewritten_query, all_retrieved_docs)
+        reranked_docs = await self._rerank_if_needed(plan.rewritten_query, all_retrieved_docs)
         processed_docs = self._post_processor.process(reranked_docs)
         context_parts = self._context_builder.build(processed_docs)
-        result = self._response_generator.generate(plan.rewritten_query, context_parts, stream)
+        result = await self._response_generator.generate(plan.rewritten_query, context_parts, stream)
         
-        # Convert Iterator to Generator if needed
-        if isinstance(result, str):
-            return result
-        else:
-            return (chunk for chunk in result)
+        return result
 
     # =========================================================================
     # Helper methods
     # =========================================================================
 
-    def _rerank_if_needed(self, rewritten_query: str, docs_for_rerank):
+    async def _rerank_if_needed(self, rewritten_query: str, docs_for_rerank):
         if self.reranker and self.config.reranker.enabled:
             logger.info("reranking docs=%d", len(docs_for_rerank))
-            return self.reranker.rerank(rewritten_query, docs_for_rerank)
+            return await self.reranker.rerank(rewritten_query, docs_for_rerank)
         return docs_for_rerank
 
     def _build_metadata_catalog(self, chunks: list) -> Dict[str, list[str]]:
