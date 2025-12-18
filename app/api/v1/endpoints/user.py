@@ -38,7 +38,7 @@ def _get_identity_from_auth(authorization: Optional[str] = Header(None)) -> dict
     return identity
 
 
-@router.get("/auth/me", response_model=UserProfile)
+@router.get("/user/profile", response_model=UserProfile)
 async def get_profile(identity: dict = Depends(_get_identity_from_auth)):
     user = await user_service.get_user_by_username(identity["username"])
     if not user:
@@ -46,7 +46,7 @@ async def get_profile(identity: dict = Depends(_get_identity_from_auth)):
     return UserProfile(username=user.username, occupation=user.occupation, bio=user.bio)
 
 
-@router.put("/auth/me", response_model=UserProfile)
+@router.put("/user/profile", response_model=UserProfile)
 async def update_profile(req: UpdateProfileRequest, identity: dict = Depends(_get_identity_from_auth)):
     try:
         user = await user_service.update_profile(identity["username"], req.dict(exclude_unset=True))
