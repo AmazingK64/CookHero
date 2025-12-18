@@ -1,0 +1,26 @@
+/**
+ * User-related type definitions
+ */
+
+export interface Credentials {
+  username: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  username: string;
+}
+
+export interface UserProfile {
+  username: string;
+  occupation?: string | null;
+  bio?: string | null;
+}
+
+export interface UserProfileUpdateRequest {
+  username?: string;
+  occupation?: string;
+  bio?: string;
+}
