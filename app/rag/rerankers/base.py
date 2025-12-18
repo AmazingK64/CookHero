@@ -9,7 +9,7 @@ class BaseReranker(ABC):
     """
     
     @abstractmethod
-    def rerank(self, query: str, documents: List[Document]) -> List[Document]:
+    async def rerank(self, query: str, documents: List[Document]) -> List[Document]:
         """
         Reranks and/or filters a list of documents based on a query.
 

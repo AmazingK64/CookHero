@@ -27,7 +27,7 @@ class SiliconFlowReranker(BaseReranker):
             "Content-Type": "application/json",
         }
 
-    def rerank(self, query: str, documents: List[Document]) -> List[Document]:
+    async def rerank(self, query: str, documents: List[Document]) -> List[Document]:
         """
         Reranks and filters documents using the SiliconFlow API.
 
@@ -52,8 +52,8 @@ class SiliconFlowReranker(BaseReranker):
         }
 
         try:
-            with httpx.Client() as client:
-                response = client.post(self.api_url, headers=self.headers, json=payload, timeout=30.0) # type: ignore
+            async with httpx.AsyncClient() as client:
+                response = await client.post(self.api_url, headers=self.headers, json=payload, timeout=30.0)  # type: ignore
                 response.raise_for_status()
                 api_results = response.json()
         except httpx.HTTPStatusError as e:
