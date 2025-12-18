@@ -393,6 +393,7 @@ function ConversationItem({
   menuRef: React.RefObject<HTMLDivElement | null>;
   editInputRef: React.RefObject<HTMLInputElement | null>;
 }) {
+  const [isComposing, setIsComposing] = useState(false);
   const displayTitle =
     conversation.title || conversation.last_message_preview || 'New Conversation';
 
@@ -405,8 +406,10 @@ function ConversationItem({
           type="text"
           value={editingTitle}
           onChange={(e) => onEditingTitleChange(e.target.value)}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') onRenameSave();
+            if (e.key === 'Enter' && !isComposing) onRenameSave();
             if (e.key === 'Escape') onRenameCancel();
           }}
           className="flex-1 bg-transparent text-sm text-gray-900 dark:text-white outline-none"
