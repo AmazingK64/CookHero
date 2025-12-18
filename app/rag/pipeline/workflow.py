@@ -36,14 +36,14 @@ class QueryPlanner:
         self._metadata_filter_extractor = metadata_filter_extractor
         self._cache_manager = cache_manager
 
-    def prepare(
+    async def prepare(
         self,
         query: str,
         metadata_catalog: Dict[str, Dict[str, List[str]]],
         skip_rewrite: bool = False,
     ) -> QueryPlan:
-        rewritten_query = query if skip_rewrite else self._generation_module.rewrite_query(query)
-        metadata_expression = self._metadata_filter_extractor.build_filter_expression(
+        rewritten_query = query if skip_rewrite else await self._generation_module.rewrite_query(query)
+        metadata_expression = await self._metadata_filter_extractor.build_filter_expression(
             query,
             metadata_catalog,
         )
@@ -65,7 +65,7 @@ class RetrievalExecutor:
         self._retrieval_modules = retrieval_modules
         self._cache_manager = cache_manager
 
-    def retrieve(
+    async def retrieve(
         self,
         rewritten_query: str,
         top_k: int,
@@ -74,7 +74,7 @@ class RetrievalExecutor:
     ) -> List[Document]:
         all_retrieved_docs: List[Document] = []
         for name, module in self._retrieval_modules.items():
-            docs = self._retrieve_from_single_source(
+            docs = await self._retrieve_from_single_source(
                 source_name=name,
                 retrieval_module=module,
                 rewritten_query=rewritten_query,
@@ -86,7 +86,7 @@ class RetrievalExecutor:
         logger.info("aggregated retrieved docs=%d", len(all_retrieved_docs))
         return all_retrieved_docs
 
-    def _retrieve_from_single_source(
+    async def _retrieve_from_single_source(
         self,
         source_name: str,
         retrieval_module: RetrievalOptimizationModule,
@@ -119,7 +119,7 @@ class RetrievalExecutor:
             ranker_type, ranker_weights = retrieval_module.intelligent_ranker_selection(rewritten_query)
 
         try:
-            retrieved_docs, retrieved_scores = retrieval_module.hybrid_search(
+            retrieved_docs, retrieved_scores = await retrieval_module.hybrid_search(
                 rewritten_query,
                 top_k=top_k,
                 ranker_type=ranker_type,
@@ -226,8 +226,8 @@ class ResponseGenerator:
     ) -> None:
         self._generation_module = generation_module
 
-    def generate(self, rewritten_query: str, context_parts: List[str], stream: bool):
-        return self._generation_module.generate_response(
+    async def generate(self, rewritten_query: str, context_parts: List[str], stream: bool):
+        return await self._generation_module.generate_response(
             query=rewritten_query,
             context_docs=context_parts,
             stream=stream,

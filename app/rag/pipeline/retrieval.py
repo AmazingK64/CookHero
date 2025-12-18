@@ -1,4 +1,5 @@
 # app/rag/retrieval_optimization.py
+import asyncio
 import logging
 from typing import List, Dict, Any, Tuple, Optional, Literal
 
@@ -41,7 +42,7 @@ class RetrievalOptimizationModule:
         
         logger.info("Retrieval module initialized with Milvus hybrid search")
         
-    def hybrid_search(
+    async def hybrid_search(
         self, 
         query: str, 
         top_k: int,
@@ -82,7 +83,9 @@ class RetrievalOptimizationModule:
             ranker_params = {"weights": ranker_weights, "norm_score": True}
         
         # Milvus hybrid search with configurable ranker
-        results = self.vectorstore.similarity_search_with_score(
+        # Use asyncio.to_thread to avoid blocking the event loop
+        results = await asyncio.to_thread(
+            self.vectorstore.similarity_search_with_score,
             query=query,
             k=top_k,
             fetch_k=int(top_k * 4),

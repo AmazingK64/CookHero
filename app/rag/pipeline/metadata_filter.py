@@ -97,7 +97,7 @@ class MetadataFilterExtractor:
         )
         self.reference_material = self._load_reference_material()
 
-    def build_filter_expression(self, query: str, metadata_catalog: Dict[str, Dict[str, List[str]]]) -> str | None:
+    async def build_filter_expression(self, query: str, metadata_catalog: Dict[str, Dict[str, List[str]]]) -> str | None:
         if not metadata_catalog:
             return None
 
@@ -108,7 +108,7 @@ class MetadataFilterExtractor:
             query=query,
         )
         try:
-            response = self.llm.invoke(prompt)
+            response = await self.llm.ainvoke(prompt)
             raw = response.content
             if not isinstance(raw, str):
                 logger.warning("LLM response is not string, casting to str.")

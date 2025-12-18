@@ -144,12 +144,12 @@ class GenerationIntegrationModule:
             base_url=self.base_url or None
         )
 
-    def rewrite_query(self, query: str) -> str:
+    async def rewrite_query(self, query: str) -> str:
         """
         Uses the LLM to rewrite a vague query into a more specific one for better retrieval.
         """
         chain = REWRITE_PROMPT | self.rewrite_llm | StrOutputParser()
-        rewritten_query = chain.invoke({"query": query}).strip()
+        rewritten_query = (await chain.ainvoke({"query": query})).strip()
         
         if rewritten_query != query:
             logger.info(f"Query rewritten: '{query}' -> '{rewritten_query}'")
@@ -160,7 +160,7 @@ class GenerationIntegrationModule:
         
         return rewritten_query
 
-    def generate_response(self, query: str, context_docs: List[str], stream: bool = False, temperature: float | None = None):
+    async def generate_response(self, query: str, context_docs: List[str], stream: bool = False, temperature: float | None = None):
         """
         Generates a final answer based on the query and a list of context strings.
         
@@ -189,9 +189,13 @@ class GenerationIntegrationModule:
             )
             
             if stream:
-                return chain.stream(query)
+                # For streaming, return an async generator
+                async def stream_generator():
+                    async for chunk in chain.astream(query):
+                        yield chunk
+                return stream_generator()
             else:
-                return chain.invoke(query)
+                return await chain.ainvoke(query)
         finally:
             # Restore original temperature if it was modified
             if original_temp is not None:
