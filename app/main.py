@@ -5,10 +5,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1.endpoints import chat, conversation, auth
+from app.api.v1.endpoints import conversation, auth, personal_docs, user
 from app.config import settings
 from app.database.session import init_db, close_db
-from app.api.v1.endpoints import user  # noqa: E402
+from app.database.document_repository import DocumentRepository
 from app.services.auth_service import auth_service
 import logging
 
@@ -24,6 +24,12 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     await init_db()
     logger.info("Database initialized.")
+    
+    # Initialize metadata cache (load all global + user metadata at startup)
+    logger.info("Initializing metadata cache...")
+    await DocumentRepository.init_all_metadata_cache()
+    logger.info("Metadata cache initialized.")
+    
     yield
     # Shutdown
     logger.info("Closing database connections...")
@@ -84,10 +90,10 @@ async def auth_gateway(request: Request, call_next):
     return await call_next(request)
 
 # Include the API routers
-app.include_router(chat.router, prefix=settings.API_V1_STR, tags=["Chat"])
 app.include_router(conversation.router, prefix=settings.API_V1_STR, tags=["Conversation"])
 app.include_router(auth.router, prefix=settings.API_V1_STR, tags=["Auth"])
 app.include_router(user.router, prefix=settings.API_V1_STR, tags=["User"])
+app.include_router(personal_docs.router, prefix=settings.API_V1_STR, tags=["KnowledgeBase"])
 
 @app.get("/")
 async def root():
