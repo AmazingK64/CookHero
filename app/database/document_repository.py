@@ -108,19 +108,34 @@ class DocumentRepository:
             if difficulty and difficulty not in user_cache["difficulty"]:
                 user_cache["difficulty"] = sorted(user_cache["difficulty"] + [difficulty])
         else:
-            # Update global cache
-            if dish_name and dish_name not in cls._global_cache.get("dish_name", []):
-                cls._global_cache["dish_name"] = sorted(
-                    cls._global_cache.get("dish_name", []) + [dish_name]
-                )
-            if category and category not in cls._global_cache.get("category", []):
-                cls._global_cache["category"] = sorted(
-                    cls._global_cache.get("category", []) + [category]
-                )
-            if difficulty and difficulty not in cls._global_cache.get("difficulty", []):
-                cls._global_cache["difficulty"] = sorted(
-                    cls._global_cache.get("difficulty", []) + [difficulty]
-                )
+            raise NotImplementedError(
+                "Global metadata cache update on create not implemented."
+            )
+
+    @classmethod
+    async def _update_cache_on_delete(
+        cls,
+        user_id: Optional[str] = None,
+    ) -> None:
+        """Update metadata cache when a document is deleted by reloading the affected cache."""
+        if user_id:
+            # Reload user cache
+            async with get_session_context() as session:
+                user_uuid = uuid.UUID(user_id)
+                user_cache = {"dish_name": [], "category": [], "difficulty": []}
+                for field_name in user_cache.keys():
+                    field = getattr(KnowledgeDocumentModel, field_name)
+                    stmt = select(func.distinct(field)).where(
+                        KnowledgeDocumentModel.user_id == user_uuid
+                    )
+                    rows = (await session.execute(stmt)).scalars().all()
+                    user_cache[field_name] = sorted([v for v in rows if v])
+                print(user_uuid, user_cache)
+                cls._user_cache[user_id] = user_cache
+        else:
+            raise NotImplementedError(
+                "Global metadata cache reload on delete not implemented."
+            )
 
     @classmethod
     def get_metadata_options(cls, user_id: Optional[str] = None) -> Dict[str, List[str]]:
@@ -358,6 +373,7 @@ class DocumentRepository:
             return False
 
         async with get_session_context() as session:
+            print(user_uuid, doc_uuid)
             stmt = delete(KnowledgeDocumentModel).where(
                 KnowledgeDocumentModel.id == doc_uuid
             )
@@ -367,9 +383,15 @@ class DocumentRepository:
             result = await session.execute(stmt)
             deleted = result.rowcount > 0  # type: ignore
             
-            if deleted:
-                logger.info("Deleted document id=%s", doc_id)
-            return deleted
+        if deleted:
+            logger.info("Deleted document id=%s", doc_id)
+            # Update metadata cache
+            if user_id:
+                await DocumentRepository._update_cache_on_delete(
+                    user_id=user_id,
+                )
+            
+        return deleted
 
     @staticmethod
     async def delete_by_data_source(data_source: str) -> int:
