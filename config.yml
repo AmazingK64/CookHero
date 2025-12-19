@@ -41,7 +41,7 @@ vector_store:
   type: "milvus"
   collection_names:
     recipes: "cook_hero_recipes"
-    tips: "cook_hero_tips"
+    "personal": "cook_hero_personal_docs"
 
 # ----------------------------------------------------------------------------
 # Retrieval Pipeline
@@ -125,11 +125,7 @@ database:
 data_source:
   howtocook:
     path_suffix: "dishes"
-    headers_to_split_on:
-      - ["#", "header_1"]
-      - ["##", "header_2"]
-  tips:
-    path_suffix: "tips"
+    tips_path_suffix: "tips"
     headers_to_split_on:
       - ["#", "header_1"]
       - ["##", "header_2"]

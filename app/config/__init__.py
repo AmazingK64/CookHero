@@ -41,7 +41,6 @@ from app.config.rag_config import (
     CacheConfig,
     DataSourceConfig,
     HowToCookConfig,
-    TipsConfig,
 )
 
 __all__ = [
@@ -66,5 +65,4 @@ __all__ = [
     "CacheConfig",
     "DataSourceConfig",
     "HowToCookConfig",
-    "TipsConfig",
 ]

@@ -30,7 +30,7 @@ class VectorStoreConfig(BaseModel):
     type: Literal["milvus"] = "milvus"
     collection_names: Dict[str, str] = {
         "recipes": "cook_hero_recipes",
-        "tips": "cook_hero_tips",
+        "personal": "cook_hero_personal_docs",
     }
 
 
@@ -84,21 +84,15 @@ class CacheConfig(BaseModel):
 
 
 class HowToCookConfig(BaseModel):
-    """HowToCook recipe data source configuration."""
+    """HowToCook recipe data source configuration (includes tips)."""
     path_suffix: str = "dishes"
-    headers_to_split_on: List[List[str]] = [["#", "header_1"], ["##", "header_2"]]
-
-
-class TipsConfig(BaseModel):
-    """Tips data source configuration."""
-    path_suffix: str = "tips"
+    tips_path_suffix: str = "tips"  # Tips are now loaded together
     headers_to_split_on: List[List[str]] = [["#", "header_1"], ["##", "header_2"]]
 
 
 class DataSourceConfig(BaseModel):
     """Data sources configuration."""
     howtocook: HowToCookConfig = HowToCookConfig()
-    tips: TipsConfig = TipsConfig()
 
 
 # =============================================================================
