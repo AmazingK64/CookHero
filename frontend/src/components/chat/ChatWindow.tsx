@@ -19,7 +19,7 @@ export function ChatWindow({ messages, isLoading, onSuggestionClick }: ChatWindo
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [messages]);
 
   const isEmpty = messages.length === 0;
@@ -27,7 +27,7 @@ export function ChatWindow({ messages, isLoading, onSuggestionClick }: ChatWindo
   return (
     <div
       className={`
-        flex-1 p-4 md:p-6 scroll-smooth
+        flex-1 p-4 md:p-6
         bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-950
         ${isEmpty ? 'overflow-y-hidden' : 'overflow-y-auto'}
       `}
