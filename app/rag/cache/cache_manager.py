@@ -13,7 +13,7 @@ import logging
 import pickle
 from typing import List, Optional
 
-import redis
+import redis.asyncio as redis
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
@@ -90,8 +90,7 @@ class CacheManager:
                 socket_connect_timeout=5,
                 socket_timeout=5,
             )
-            client.ping()
-            client.flushdb()
+            client.flushdb()  # Test connection
             self.redis_client = client
             self.keyword_cache = RedisKeywordCache(client)
             logger.info(f"Redis L1 cache connected: {redis_host}:{redis_port}")
@@ -138,7 +137,7 @@ class CacheManager:
         scope_label = scope or "global"
         return f"rag:retrieval:{data_source}:{scope_label}:{query_hash}"
     
-    def get(
+    async def get(
         self,
         data_source: str,
         query: str,
@@ -158,7 +157,7 @@ class CacheManager:
         if self.keyword_cache:
             try:
                 cache_key = self._get_cache_key(data_source, query, scope)
-                cached_data = self.keyword_cache.get(cache_key)
+                cached_data = await self.keyword_cache.get(cache_key)
                 
                 if cached_data:
                     docs = pickle.loads(cached_data)
@@ -171,7 +170,7 @@ class CacheManager:
         if self._should_use_l2():
             try:
                 query_embedding = self.embeddings.embed_query(query)  # type: ignore
-                result = self.vector_cache.search(  # type: ignore
+                result = await self.vector_cache.search(  # type: ignore
                     query_embedding,
                     self.similarity_threshold,
                     scope=scope,
@@ -189,7 +188,7 @@ class CacheManager:
         logger.debug(f"Cache MISS for '{data_source}'")
         return None
     
-    def set(
+    async def set(
         self,
         data_source: str,
         query: str,
@@ -214,7 +213,7 @@ class CacheManager:
         if self.keyword_cache:
             try:
                 cache_key = self._get_cache_key(data_source, query, scope)
-                stored = self.keyword_cache.set(cache_key, serialized, ttl_seconds=self.ttl)
+                stored = await self.keyword_cache.set(cache_key, serialized, ttl_seconds=self.ttl)
                 if stored:
                     logger.info(f"L1 cache SET for '{data_source}': {len(documents)} documents (TTL={self.ttl}s)")
                 else:
@@ -229,7 +228,7 @@ class CacheManager:
                 query_embedding = self.embeddings.embed_query(query)  # type: ignore
                 scoped = scope or "global"
                 cache_key = self._compute_hash(f"{data_source}:{scoped}:{query}")
-                stored = self.vector_cache.add(  # type: ignore
+                stored = await self.vector_cache.add(  # type: ignore
                     cache_key,
                     query_embedding,
                     serialized,
@@ -260,12 +259,3 @@ class CacheManager:
     def _should_use_l2(self) -> bool:
         """Check if L2 cache should be used."""
         return bool(self.l2_enabled and self.vector_cache and self.embeddings)
-    
-    # Backward compatibility methods
-    def get_retrieval_cache(self, data_source: str, query: str) -> Optional[List[Document]]:
-        """Backward compatible method for getting retrieval cache."""
-        return self.get(data_source, query)
-    
-    def set_retrieval_cache(self, data_source: str, query: str, documents: List[Document]) -> bool:
-        """Backward compatible method for setting retrieval cache."""
-        return self.set(data_source, query, documents)

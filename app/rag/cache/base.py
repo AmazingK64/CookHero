@@ -13,22 +13,22 @@ class KeywordCacheBackend(ABC):
     """Abstract base class for keyword-based cache backends (exact match)."""
     
     @abstractmethod
-    def get(self, key: str):
+    async def get(self, key: str):
         """Get a value by key."""
         pass
     
     @abstractmethod
-    def set(self, key: str, value: bytes, ttl_seconds: int | None = None) -> bool:
+    async def set(self, key: str, value: bytes, ttl_seconds: int | None = None) -> bool:
         """Set a value with optional TTL."""
         pass
     
     @abstractmethod
-    def delete(self, key: str) -> bool:
+    async def delete(self, key: str) -> bool:
         """Delete a value by key."""
         pass
     
     @abstractmethod
-    def clear(self, pattern: str | None = None) -> bool:
+    async def clear(self, pattern: str | None = None) -> bool:
         """Clear cache entries matching pattern."""
         pass
 
@@ -37,7 +37,7 @@ class VectorCacheBackend(ABC):
     """Abstract base class for vector-based cache backends (semantic similarity)."""
     
     @abstractmethod
-    def add(
+    async def add(
         self,
         key: str,
         embedding: List[float],
@@ -57,7 +57,7 @@ class VectorCacheBackend(ABC):
         pass
     
     @abstractmethod
-    def search(
+    async def search(
         self,
         embedding: List[float],
         threshold: float,
@@ -73,7 +73,7 @@ class VectorCacheBackend(ABC):
         pass
     
     @abstractmethod
-    def clear(self) -> bool:
+    async def clear(self) -> bool:
         """Clear all cached vectors."""
         pass
 

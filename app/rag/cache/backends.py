@@ -1,12 +1,13 @@
 # app/rag/cache/backends.py
 """Concrete implementations of cache backends."""
+import asyncio
 import base64
 import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-import redis
+import redis.asyncio as redis
 from pymilvus import (
     Collection,
     CollectionSchema,
@@ -33,21 +34,21 @@ class RedisKeywordCache(KeywordCacheBackend):
         """
         self.client = client
 
-    def get(self, key: str):
+    async def get(self, key: str):
         """Get a value by key."""
         try:
-            return self.client.get(key)
+            return await self.client.get(key)
         except Exception as e:
             logger.warning(f"Error getting key '{key}' from Redis: {e}")
             return None
 
-    def set(self, key: str, value: bytes, ttl_seconds: int | None = None) -> bool:
+    async def set(self, key: str, value: bytes, ttl_seconds: int | None = None) -> bool:
         """Set a value with optional TTL."""
         try:
             if ttl_seconds is not None:
-                result = self.client.setex(key, ttl_seconds, value)
+                result = await self.client.setex(key, ttl_seconds, value)
             else:
-                result = self.client.set(key, value)
+                result = await self.client.set(key, value)
             success = bool(result)
             if not success:
                 logger.warning("Redis did not acknowledge set for key '%s'", key)
@@ -56,10 +57,10 @@ class RedisKeywordCache(KeywordCacheBackend):
             logger.warning(f"Error setting key '{key}' in Redis: {e}")
             return False
 
-    def delete(self, key: str) -> bool:
+    async def delete(self, key: str) -> bool:
         """Delete a value by key."""
         try:
-            deleted = int(self.client.delete(key)) # type: ignore
+            deleted = await self.client.delete(key)
             success = deleted > 0
             if not success:
                 logger.debug("Redis delete skipped for key '%s' (not found)", key)
@@ -68,15 +69,15 @@ class RedisKeywordCache(KeywordCacheBackend):
             logger.warning(f"Error deleting key '{key}' from Redis: {e}")
             return False
 
-    def clear(self, pattern: str | None = None) -> bool:
+    async def clear(self, pattern: str | None = None) -> bool:
         """Clear cache entries matching pattern."""
         pat = pattern or "*"
         try:
             cursor = 0
             while True:
-                cursor, keys = self.client.scan(cursor=cursor, match=pat, count=500) # type: ignore
+                cursor, keys = await self.client.scan(cursor=cursor, match=pat, count=500)
                 if keys:
-                    self.client.delete(*keys)
+                    await self.client.delete(*keys)
                 if cursor == 0:
                     break
             return True
@@ -121,7 +122,7 @@ class MilvusVectorCache(VectorCacheBackend):
         self._ensure_index()
         self._collection.load()
 
-    def add(
+    async def add(
         self,
         key: str,
         embedding: List[float],
@@ -146,7 +147,7 @@ class MilvusVectorCache(VectorCacheBackend):
         expires_at = time.time() + ttl_seconds if ttl_seconds else 0.0
         scope_value = scope or "global"
 
-        self._delete_existing(key)
+        await asyncio.to_thread(self._delete_existing, key)
         try:
             # Serialize payload to base64 string if it's bytes
             if isinstance(payload, bytes):
@@ -154,19 +155,22 @@ class MilvusVectorCache(VectorCacheBackend):
             else:
                 payload_str = str(payload)
             
-            self._collection.insert([
-                [key],
-                [normalized],
-                [payload_str],
-                [float(expires_at)],
-                [scope_value],
-            ])
+            await asyncio.to_thread(
+                self._collection.insert,
+                [
+                    [key],
+                    [normalized],
+                    [payload_str],
+                    [float(expires_at)],
+                    [scope_value],
+                ],
+            )
             return True
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning("Failed to insert cache entry into Milvus: %s", exc)
             return False
 
-    def search(
+    async def search(
         self,
         embedding: List[float],
         threshold: float,
@@ -185,11 +189,12 @@ class MilvusVectorCache(VectorCacheBackend):
         normalized = (vector / norm).tolist()
         expr = self._build_valid_expr(scope)
         try:
-            results = self._collection.search(
-                data=[normalized],
-                anns_field="embedding",
-                param=self._search_params,
-                limit=1,
+            results = await asyncio.to_thread(
+                self._collection.search,
+                [normalized],
+                "embedding",
+                self._search_params,
+                1,
                 expr=expr,
                 output_fields=["payload_data"],
             )
@@ -225,11 +230,11 @@ class MilvusVectorCache(VectorCacheBackend):
         
         return (payload, similarity)
 
-    def clear(self) -> bool:
+    async def clear(self) -> bool:
         if not self._collection:
             return False
         try:
-            self._collection.delete(expr='cache_key >= ""')
+            await asyncio.to_thread(self._collection.delete, expr='cache_key >= ""')
             return True
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning("Failed to clear Milvus vector cache: %s", exc)
