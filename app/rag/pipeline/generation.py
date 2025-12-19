@@ -1,10 +1,11 @@
-# app/rag/generation_integration.py
+# app/rag/pipeline/generation.py
+"""LLM integration for query rewriting and response generation."""
+
 import logging
 from typing import List
 
-from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.runnables import RunnablePassthrough
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -92,13 +93,6 @@ GENERATION_PROMPT_TEMPLATE = """
 """
 GENERATION_PROMPT = ChatPromptTemplate.from_template(GENERATION_PROMPT_TEMPLATE)
 
-def make_debug_input(invoker_name):
-    def debug_input(x):
-        print(f"=== {invoker_name} Final Input ===")
-        print(x)
-        print("======================")
-        return x
-    return debug_input
 
 class GenerationIntegrationModule:
     """
@@ -183,7 +177,6 @@ class GenerationIntegrationModule:
             chain = (
                 {"question": RunnablePassthrough(), "context": lambda _: context_str}
                 | GENERATION_PROMPT
-                # | RunnableLambda(make_debug_input("generate_response"))
                 | self.llm
                 | StrOutputParser()
             )

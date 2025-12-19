@@ -1,7 +1,7 @@
-# app/rag/retrieval_optimization.py
+# app/rag/pipeline/retrieval.py
 import asyncio
 import logging
-from typing import List, Dict, Any, Tuple, Optional, Literal
+from typing import List, Tuple, Optional
 
 from langchain_milvus import Milvus
 from langchain_core.documents import Document
@@ -12,12 +12,10 @@ class RetrievalOptimizationModule:
     """
     Handles advanced retrieval strategies using Milvus built-in hybrid search.
     Combines dense vector search with sparse BM25 search using Milvus native capabilities.
-    Supports dynamic ranker configuration and score-based filtering.
     """
     def __init__(
         self, 
         vectorstore: Milvus, 
-        child_chunks: List[Document],
         score_threshold: float = 0.0,
         default_ranker_type: str = "rrf",
         default_ranker_weights: List[float] = [0.5, 0.5]
@@ -26,7 +24,6 @@ class RetrievalOptimizationModule:
         Initializes the retrieval optimization module.
         Args:
             vectorstore: The Milvus vectorstore with BM25 built-in function enabled.
-            child_chunks: The list of all child document chunks (kept for compatibility).
             score_threshold: Minimum score threshold for filtering low-quality results.
             default_ranker_type: Default ranker type ("rrf" or "weighted").
             default_ranker_weights: Default weights for [dense, sparse] when using weighted ranker.
@@ -35,7 +32,6 @@ class RetrievalOptimizationModule:
             raise ValueError("Vectorstore must be provided.")
             
         self.vectorstore = vectorstore
-        self.child_chunks = child_chunks  # Keep for potential future use
         self.score_threshold = score_threshold
         self.default_ranker_type = default_ranker_type
         self.default_ranker_weights = default_ranker_weights
