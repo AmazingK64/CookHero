@@ -298,7 +298,7 @@ class RAGService:
         
         # Check cache
         if self.cache_manager:
-            cached_docs = self.cache_manager.get(
+            cached_docs = await self.cache_manager.get(
                 source_name,
                 rewritten_query,
                 user_id if source_name == "personal" else None,
@@ -351,7 +351,7 @@ class RAGService:
 
         # Cache results
         if self.cache_manager:
-            self.cache_manager.set(
+            await self.cache_manager.set(
                 source_name,
                 rewritten_query,
                 final_docs,
