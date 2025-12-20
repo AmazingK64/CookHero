@@ -90,7 +90,6 @@ class CacheManager:
                 socket_connect_timeout=5,
                 socket_timeout=5,
             )
-            client.flushdb()  # Test connection
             self.redis_client = client
             self.keyword_cache = RedisKeywordCache(client)
             logger.info(f"Redis L1 cache connected: {redis_host}:{redis_port}")
