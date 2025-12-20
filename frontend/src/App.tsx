@@ -1,78 +1,58 @@
 // src/App.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import type { ReactElement } from 'react';
 import { BookOpen, Menu, LogOut, MessageSquare } from 'lucide-react';
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ChatWindow, ChatInput, Sidebar, KnowledgePanel } from './components';
-import { useConversation } from './hooks';
-import { useTheme, useAuth } from './contexts';
+import { useTheme, useAuth, useConversationContext } from './contexts';
 import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
 
-type MainView = 'chat' | 'knowledge';
-
-function ConversationPage() {
-  const { token, username, logout } = useAuth();
+/**
+ * Chat view component - handles both new chat and existing conversation
+ */
+function ChatView() {
+  const { id: urlConversationId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
   const {
     messages,
     conversationId,
-    conversations,
-    totalConversations,
-    hasMoreConversations,
     isLoading,
     isStreaming,
     error,
     sendMessage,
     selectConversation,
-    clearMessages,
     stopGeneration,
-    removeConversation,
-    renameConversation,
-    loadMoreConversations,
-  } = useConversation(token || undefined);
+  } = useConversationContext();
 
-  const { isDark, toggleTheme } = useTheme();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [suggestionText, setSuggestionText] = useState<string>('');
-  const [mainView, setMainView] = useState<MainView>(() => {
-    try {
-      const stored = localStorage.getItem('cookhero:mainView');
-      if (stored === 'chat' || stored === 'knowledge') return stored;
-    } catch (err) {
-      // no-op: fall back to default
-    }
-    return 'chat';
-  });
+  
+  // Track if we've done initial sync to avoid re-triggering on subsequent renders
+  const initialSyncDone = useRef(false);
 
+  // Sync URL conversation ID with hook state on mount or when URL changes
+  // This handles page refresh and direct URL access
   useEffect(() => {
-    try {
-      localStorage.setItem('cookhero:mainView', mainView);
-    } catch (err) {
-      // ignore storage errors
+    // Only sync from URL to state, not the other way around
+    // MainLayout.handleSelectConversation handles navigation when user clicks
+    if (urlConversationId && urlConversationId !== conversationId) {
+      selectConversation(urlConversationId);
     }
-  }, [mainView]);
+    initialSyncDone.current = true;
+  }, [urlConversationId]); // Only depend on URL changes, not conversationId
 
-  const handleNewChat = () => {
-    clearMessages();
-    setMainView('chat');
-    if (window.innerWidth < 768) {
-      setIsSidebarOpen(false);
+  // Update URL when a NEW conversation is created (temp -> real ID)
+  // This only triggers when sending the first message creates a new conversation
+  useEffect(() => {
+    if (
+      initialSyncDone.current &&
+      conversationId &&
+      !conversationId.startsWith('temp-') &&
+      !urlConversationId // Only update URL if we're on /chat (no ID in URL yet)
+    ) {
+      navigate(`/chat/${conversationId}`, { replace: true });
     }
-  };
-
-  const handleSelectConversation = (id: string) => {
-    selectConversation(id);
-    setMainView('chat');
-    if (window.innerWidth < 768) {
-      setIsSidebarOpen(false);
-    }
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+  }, [conversationId, urlConversationId, navigate]);
 
   const handleSuggestionClick = (text: string) => {
     setSuggestionText(text);
@@ -82,9 +62,92 @@ function ConversationPage() {
     setSuggestionText('');
   };
 
-  const toggleMainView = () => {
-    setMainView((prev) => (prev === 'chat' ? 'knowledge' : 'chat'));
-  };
+  return (
+    <>
+      {error && (
+        <div className="absolute top-4 left-4 right-4 z-10 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+          ⚠️ {error}
+        </div>
+      )}
+      
+      <ChatWindow messages={messages} isLoading={isLoading} onSuggestionClick={handleSuggestionClick} />
+      
+      <div className="p-4 max-w-4xl w-full mx-auto">
+        <ChatInput
+          onSend={sendMessage}
+          onCancel={stopGeneration}
+          disabled={isLoading}
+          isStreaming={isStreaming}
+          placeholder="Ask CookHero anything about cooking..."
+          externalValue={suggestionText}
+          onExternalValueConsumed={handleSuggestionConsumed}
+        />
+        <div className="text-center text-xs text-gray-400 mt-2">
+          CookHero can make mistakes. Consider checking important information.
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Main layout component with sidebar
+ */
+function MainLayout({ children }: { children: React.ReactNode }) {
+  const { username, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const {
+    conversationId,
+    conversations,
+    totalConversations,
+    hasMoreConversations,
+    selectConversation,
+    clearMessages,
+    removeConversation,
+    renameConversation,
+    loadMoreConversations,
+  } = useConversationContext();
+
+  const { isDark, toggleTheme } = useTheme();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Determine current view from pathname
+  const isKnowledgeView = location.pathname === '/knowledge';
+
+  const handleNewChat = useCallback(() => {
+    clearMessages();
+    navigate('/chat');
+    if (window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
+  }, [clearMessages, navigate]);
+
+  const handleSelectConversation = useCallback((id: string) => {
+    selectConversation(id);
+    navigate(`/chat/${id}`);
+    if (window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
+  }, [selectConversation, navigate]);
+
+  const handleLogout = useCallback(() => {
+    logout();
+    navigate('/login');
+  }, [logout, navigate]);
+
+  const toggleMainView = useCallback(() => {
+    if (isKnowledgeView) {
+      // Return to chat - if there's a current conversation, go to it
+      if (conversationId && !conversationId.startsWith('temp-')) {
+        navigate(`/chat/${conversationId}`);
+      } else {
+        navigate('/chat');
+      }
+    } else {
+      navigate('/knowledge');
+    }
+  }, [isKnowledgeView, conversationId, navigate]);
 
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
@@ -120,7 +183,7 @@ function ConversationPage() {
             </div>
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-300">
-            {mainView === 'chat' && conversationId && (
+            {!isKnowledgeView && conversationId && (
               <span className="font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded break-all whitespace-pre-wrap">
                 ID: {conversationId}
               </span>
@@ -128,12 +191,12 @@ function ConversationPage() {
             <button
               onClick={toggleMainView}
               className={`flex items-center gap-1 px-3 py-1 rounded-full border transition-colors ${
-                mainView === 'knowledge'
+                isKnowledgeView
                   ? 'border-orange-400 bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-200 dark:border-orange-600'
                   : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
               }`}
             >
-              {mainView === 'knowledge' ? (
+              {isKnowledgeView ? (
                 <>
                   <MessageSquare className="w-4 h-4" />
                   <span>返回对话</span>
@@ -162,34 +225,7 @@ function ConversationPage() {
         </header>
 
         <main className="flex-1 flex flex-col overflow-hidden relative bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-950">
-          {mainView === 'chat' ? (
-            <>
-              {error && (
-                <div className="absolute top-4 left-4 right-4 z-10 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
-                  ⚠️ {error}
-                </div>
-              )}
-              
-              <ChatWindow messages={messages} isLoading={isLoading} onSuggestionClick={handleSuggestionClick} />
-              
-              <div className="p-4 max-w-4xl w-full mx-auto">
-                <ChatInput
-                  onSend={sendMessage}
-                  onCancel={stopGeneration}
-                  disabled={isLoading}
-                  isStreaming={isStreaming}
-                  placeholder="Ask CookHero anything about cooking..."
-                  externalValue={suggestionText}
-                  onExternalValueConsumed={handleSuggestionConsumed}
-                />
-                <div className="text-center text-xs text-gray-400 mt-2">
-                  CookHero can make mistakes. Consider checking important information.
-                </div>
-              </div>
-            </>
-          ) : (
-            <KnowledgePanel />
-          )}
+          {children}
         </main>
       </div>
     </div>
@@ -210,17 +246,43 @@ function RequireAuth({ children }: { children: ReactElement }) {
 function App() {
   return (
     <Routes>
+      {/* Protected routes with main layout */}
       <Route
-        path="/"
+        path="/chat"
         element={
           <RequireAuth>
-            <ConversationPage />
+            <MainLayout>
+              <ChatView />
+            </MainLayout>
           </RequireAuth>
         }
       />
+      <Route
+        path="/chat/:id"
+        element={
+          <RequireAuth>
+            <MainLayout>
+              <ChatView />
+            </MainLayout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/knowledge"
+        element={
+          <RequireAuth>
+            <MainLayout>
+              <KnowledgePanel />
+            </MainLayout>
+          </RequireAuth>
+        }
+      />
+      {/* Auth routes */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Default redirect to chat */}
+      <Route path="/" element={<Navigate to="/chat" replace />} />
+      <Route path="*" element={<Navigate to="/chat" replace />} />
     </Routes>
   );
 }

@@ -7,3 +7,6 @@ export type { AuthContextValue } from './AuthContext';
 
 export { ThemeProvider, useTheme } from './ThemeContext';
 export type { ThemeContextValue } from './ThemeContext';
+
+export { ConversationProvider, useConversationContext } from './ConversationContext';
+export type { ConversationContextValue } from './ConversationContext';
