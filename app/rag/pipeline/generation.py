@@ -60,40 +60,6 @@ REWRITE_PROMPT_TEMPLATE = """
 """
 REWRITE_PROMPT = ChatPromptTemplate.from_template(REWRITE_PROMPT_TEMPLATE)
 
-
-GENERATION_PROMPT_TEMPLATE = """
-<|system|>
-你是 CookHero，一位友好且专业的烹饪助手。你的目标是提供清晰、有用且充满鼓励的烹饪建议。
-
-**核心指令：**
-
-1.  **分析上下文并过滤噪声：**
-    -   仔细检查下方提供的“Recipe & Tip Information”（食谱与技巧信息）。
-    -   **忽略**任何与用户具体问题无关的文档或文本片段。**只关注**能直接帮助回答该问题的部分。
-
-2.  **响应策略（按优先级排序）：**
-    -   **场景 A：找到相关信息**
-        如果上下文中包含相关的食谱或技巧，请**主要**基于该信息构建你的回答。你可以对信息进行整理和总结，使其更易于阅读。
-    
-    -   **场景 B：未找到相关信息**
-        如果提供的上下文为空，或与用户的问题完全无关，**不要拒绝回答**。相反：
-        1.  礼貌地告知用户，在他的个人知识库/收藏中没有找到该特定的食谱或技巧。
-        2.  **立即提供有用的解决方案**，基于你自己通用的烹饪知识来回答。
-
-3.  **语气与格式：**
-    -   语气要带有鼓励性，就像厨房里一位乐于助人的朋友。
-    -   使用 Markdown（标题、加粗、列表）使说明清晰易读。
-
-<|user|>
-## 问题:
-{question}
-## Recipe & Tip 信息:
-{context}
-<|assistant|>
-"""
-GENERATION_PROMPT = ChatPromptTemplate.from_template(GENERATION_PROMPT_TEMPLATE)
-
-
 class GenerationIntegrationModule:
     """
     Integrates with a Large Language Model (LLM) for rewriting and 
@@ -112,20 +78,7 @@ class GenerationIntegrationModule:
         self.max_tokens = max_tokens
         self.api_key = api_key
         self.base_url = base_url
-        self.llm = self._init_llm()
-        # Dedicated LLM for query rewriting (deterministic)
         self.rewrite_llm = self._init_rewrite_llm()
-        
-    def _init_llm(self) -> ChatOpenAI:
-        """Initializes the Chat LLM."""
-        logger.info(f"Initializing LLM: {self.model_name}")
-        return ChatOpenAI(
-            model=self.model_name,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens, # type: ignore
-            api_key=self.api_key,
-            base_url=self.base_url or None
-        )
 
     def _init_rewrite_llm(self) -> ChatOpenAI:
         """Initializes a deterministic LLM for query rewriting."""
@@ -153,61 +106,3 @@ class GenerationIntegrationModule:
             logger.info(f"Query did not require rewriting: '{query}'")
         
         return rewritten_query
-
-    async def generate_response(self, query: str, context_docs: List[str], stream: bool = False, temperature: float | None = None):
-        """
-        Generates a final answer based on the query and a list of context strings.
-        
-        Args:
-            query: The user's query
-            context_docs: List of context document strings
-            stream: Whether to stream the response
-            temperature: Optional temperature override. If provided, temporarily modifies LLM temperature.
-        """
-        # Temporarily modify temperature if specified
-        original_temp = None
-        if temperature is not None:
-            original_temp = self.llm.temperature
-            self.llm.temperature = temperature
-            logger.debug(f"Temporarily set LLM temperature to {temperature}")
-        
-        try:
-            context_str = self._build_context_string(context_docs)
-            
-            chain = (
-                {"question": RunnablePassthrough(), "context": lambda _: context_str}
-                | GENERATION_PROMPT
-                | self.llm
-                | StrOutputParser()
-            )
-            
-            if stream:
-                # For streaming, return an async generator
-                async def stream_generator():
-                    async for chunk in chain.astream(query):
-                        yield chunk
-                return stream_generator()
-            else:
-                return await chain.ainvoke(query)
-        finally:
-            # Restore original temperature if it was modified
-            if original_temp is not None:
-                self.llm.temperature = original_temp
-                logger.debug(f"Restored LLM temperature to {original_temp}")
-            
-    def _build_context_string(self, docs: List[str]) -> str:
-        """
-        Builds a formatted, structured string from the list of context strings.
-        """
-        if not docs:
-            return "No relevant information found."
-        
-        context_parts = []
-        for i, doc_content in enumerate(docs):
-            header = f"--- Context Document [{i+1}] ---\n\n"
-            content = doc_content
-            
-            doc_str = header + content + "\n"
-            context_parts.append(doc_str)
-            
-        return "\n".join(context_parts)
