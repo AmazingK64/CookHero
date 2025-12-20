@@ -27,7 +27,7 @@ export function ChatWindow({ messages, isLoading, onSuggestionClick }: ChatWindo
 
     const { scrollTop, scrollHeight, clientHeight } = container;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    return distanceFromBottom < 100; // Consider "near bottom" if within 100px
+    return distanceFromBottom < 1; // Consider "near bottom" if within 768px
   }, []);
 
   // Handle scroll events to track user interaction
@@ -35,7 +35,7 @@ export function ChatWindow({ messages, isLoading, onSuggestionClick }: ChatWindo
     if (!isUserScrolling) {
       setIsUserScrolling(true);
       // Reset user scrolling flag after a short delay
-      setTimeout(() => setIsUserScrolling(false), 150);
+      setTimeout(() => setIsUserScrolling(false), 10000);
     }
     setIsNearBottom(checkIsNearBottom());
   }, [isUserScrolling, checkIsNearBottom]);
