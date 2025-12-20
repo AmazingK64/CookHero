@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from math import log
 import os
 from typing import AsyncGenerator, Dict, List, Optional
 
@@ -71,6 +72,7 @@ SYSTEM_PROMPT = """
 - 语气：友好、耐心、专业，不居高临下
 - 长度：简洁但信息充分，避免冗余
 - 用词：贴近日常厨房语境，避免学术或营销腔
+- 表情符号：多使用一些emoji符号来增强表达效果
 - 输出格式：使用Markdown语法
 """
 
@@ -188,12 +190,12 @@ class ConversationService:
             yield emit_thinking("⏳ 正在结合对话历史重写查询语句...")
             
             try:
-                # Rewrite query with chat history context
-                rewritten_query = await self.query_rewriter.rewrite_with_history(
-                    message, history_text
+                rewritten_query = await self.query_rewriter.rewrite(
+                    current_query=message,
+                    history_text=history_text,
                 )
-                yield emit_thinking(f"✏️ 重写后的查询: {rewritten_query}")
-                
+                yield emit_thinking(f"✍️ 重写后的查询语句: {rewritten_query}")
+
                 yield emit_thinking("🔎 正在从 CookHero 知识库中检索相关资料...")
                 
                 # Retrieve context once and reuse for generation + sources
