@@ -3,7 +3,7 @@
  * Main chat area with message display and empty state
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { ChefHat, Sparkles, BookOpen, Lightbulb, UtensilsCrossed } from 'lucide-react';
 import type { Message } from '../../types';
 import { MessageBubble } from './MessageBubble';
@@ -16,16 +16,56 @@ export interface ChatWindowProps {
 
 export function ChatWindow({ messages, isLoading, onSuggestionClick }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Check if user is near the bottom of the scroll container
+  const checkIsNearBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return true;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    return distanceFromBottom < 100; // Consider "near bottom" if within 100px
+  }, []);
+
+  // Handle scroll events to track user interaction
+  const handleScroll = useCallback(() => {
+    if (!isUserScrolling) {
+      setIsUserScrolling(true);
+      // Reset user scrolling flag after a short delay
+      setTimeout(() => setIsUserScrolling(false), 150);
+    }
+    setIsNearBottom(checkIsNearBottom());
+  }, [isUserScrolling, checkIsNearBottom]);
+
+  // Auto-scroll to bottom when new messages arrive, but only if user is near bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-  }, [messages]);
+    if (isNearBottom && !isUserScrolling && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isNearBottom, isUserScrolling]);
+
+  // Set up scroll event listener
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll, { passive: true });
+      return () => container.removeEventListener('scroll', handleScroll);
+    }
+  }, [handleScroll]);
+
+  // Initialize near bottom state
+  useEffect(() => {
+    setIsNearBottom(checkIsNearBottom());
+  }, [checkIsNearBottom]);
 
   const isEmpty = messages.length === 0;
 
   return (
     <div
+      ref={scrollContainerRef}
       className={`
         flex-1 p-4 md:p-6
         bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-950
