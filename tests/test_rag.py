@@ -21,14 +21,14 @@ async def test_rag_service():
         "皮蛋瘦肉粥怎么做？",
         # "请推荐几道简单的素菜。",
         # "皮蛋有哪些做法？",
-        "皮蛋粥怎么做？",
+        # "皮蛋粥怎么做？",
     ]
 
     for i, question in enumerate(sample_questions):
         logger.info(f"\n--- Question {i+1}: {question} ---")
         try:
             logger.info("Streaming response:")
-            response = await rag_service_instance.ask_with_generation(question, stream=False)
+            response = await rag_service_instance.retrieve(question)
             print(response)
             print("\n")
             
