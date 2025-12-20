@@ -28,7 +28,7 @@ function RegisterPage() {
     setError(null);
     try {
       await register({ username: username.trim(), password });
-      navigate('/', { replace: true });
+      navigate('/chat', { replace: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unable to register';
       setError(msg.includes('\n') ? msg.split('\n').map(s => s.trim()).filter(Boolean) : msg);
