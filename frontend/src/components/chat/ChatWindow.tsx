@@ -27,7 +27,7 @@ export function ChatWindow({ messages, isLoading, onSuggestionClick }: ChatWindo
 
     const { scrollTop, scrollHeight, clientHeight } = container;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    return distanceFromBottom < 200;
+    return distanceFromBottom < 100;
   }, []);
 
   // Handle scroll events to track user interaction
