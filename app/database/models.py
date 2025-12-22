@@ -140,6 +140,10 @@ class MessageModel(Base):
     sources: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     intent: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     thinking: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    
+    # Duration metrics for response timing (in milliseconds)
+    thinking_duration_ms: Mapped[Optional[int]] = mapped_column(nullable=True)
+    answer_duration_ms: Mapped[Optional[int]] = mapped_column(nullable=True)
 
     # Relationship to conversation
     conversation: Mapped["ConversationModel"] = relationship(
@@ -160,6 +164,8 @@ class MessageModel(Base):
             "sources": self.sources,
             "intent": self.intent,
             "thinking": self.thinking,
+            "thinking_duration_ms": self.thinking_duration_ms,
+            "answer_duration_ms": self.answer_duration_ms,
         }
 
 

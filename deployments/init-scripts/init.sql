@@ -24,7 +24,9 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     sources JSONB,
     intent VARCHAR(50),
-    thinking JSONB
+    thinking JSONB,
+    thinking_duration_ms INTEGER,
+    answer_duration_ms INTEGER
 );
 
 -- Create indexes for performance
@@ -69,6 +71,11 @@ CREATE INDEX IF NOT EXISTS ix_users_occupation ON users(occupation);
 ALTER TABLE conversations
     ADD COLUMN IF NOT EXISTS compressed_summary TEXT,
     ADD COLUMN IF NOT EXISTS compressed_message_count INT DEFAULT 0 NOT NULL;
+
+-- Add duration tracking columns to messages table (for existing databases)
+ALTER TABLE messages
+    ADD COLUMN IF NOT EXISTS thinking_duration_ms INTEGER,
+    ADD COLUMN IF NOT EXISTS answer_duration_ms INTEGER;
 
 -- Grant permissions (if using different roles)
 -- GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO cookhero;
