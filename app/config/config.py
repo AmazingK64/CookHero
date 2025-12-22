@@ -14,7 +14,7 @@ import os
 from pydantic import BaseModel
 
 from app.config.database_config import DatabaseConfig
-from app.config.llm_config import LLMProviderConfig
+from app.config.llm_config import LLMConfig
 from app.config.rag_config import RAGConfig
 from app.config.web_search_config import WebSearchConfig
 from app.config.config_loader import (
@@ -53,14 +53,15 @@ class Settings(BaseModel):
     # ==========================================================================
     # Module Configurations
     # ==========================================================================
-    # Global LLM provider configuration
-    llm: LLMProviderConfig = load_llm_config()
+    # Global LLM provider configuration (layered: fast/normal)
+    llm: LLMConfig = load_llm_config()
 
     # Database configurations (PostgreSQL, Redis, Milvus)
     database: DatabaseConfig = load_database_config()
 
     # RAG configuration loaded from config.yml
-    rag: RAGConfig = load_rag_config(llm)
+    # Note: RAG reranker api_key may fall back to normal LLM api_key
+    rag: RAGConfig = load_rag_config(llm.normal)
     
     # Web Search configuration loaded from config.yml
     web_search: WebSearchConfig = load_web_search_config()

@@ -6,7 +6,7 @@ These models define the structure for the config.yml file.
 Design principles:
 1. Database connection configs are defined in DatabaseConfig and passed in
 2. RAG-specific configs only define their unique fields
-3. LLM config uses the global LLMProviderConfig directly
+3. LLM config uses the global LLMConfig (layered: fast/normal)
 """
 
 from pydantic import BaseModel
@@ -105,7 +105,7 @@ class RAGConfig(BaseModel):
     
     Note: 
     - Database connections are in DatabaseConfig and passed separately
-    - LLM configuration uses global LLMProviderConfig
+    - LLM configuration uses global LLMConfig (layered: fast/normal)
     """
     # Module configurations
     paths: PathsConfig = PathsConfig()

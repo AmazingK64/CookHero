@@ -11,18 +11,36 @@
 # ============================================================================
 
 # ----------------------------------------------------------------------------
-# Common LLM Provider Configuration
+# Common LLM Provider Configuration (Layered: fast / normal)
 # ----------------------------------------------------------------------------
-# This configuration is shared across all modules that use LLM.
-# Individual modules can override specific fields if needed.
+# fast: optimized for low latency (intent detection, query rewriting, etc.)
+# normal: optimized for quality (final response generation, complex reasoning)
+#
+# Each profile supports:
+#   - model_names: list of models (one will be randomly selected per call)
+#   - base_url, api_key (api_key loaded from .env: LLM_API_KEY / FAST_LLM_API_KEY)
+#   - temperature, max_tokens
 llm:
-  model_name: "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B"
-  # model_name: "XiaomiMiMo/MiMo-V2-Flash"
-  base_url: "https://api.siliconflow.cn/v1"
-  # base_url: "https://api-inference.modelscope.cn/v1"
-  # api_key: loaded from .env (LLM_API_KEY)
-  temperature: 1
-  max_tokens: 131072
+  fast:
+    model_names:
+      - "XiaomiMiMo/MiMo-V2-Flash"
+      - "XiaomiMiMo/MiMo-V2-Flash"
+      - "Qwen/Qwen3-Next-80B-A3B-Instruct"
+      - "Qwen/Qwen3-Coder-480B-A35B-Instruct"
+    base_url: "https://api-inference.modelscope.cn/v1"
+    # api_key: loaded from .env (FAST_LLM_API_KEY or LLM_API_KEY)
+    temperature: 1
+    max_tokens: 131072
+
+  normal:
+    model_names:
+      - "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B"
+      - "Qwen/Qwen3-VL-30B-A3B-Instruct"
+      - "Qwen/Qwen2.5-7B-Instruct"
+    base_url: "https://api.siliconflow.cn/v1"
+    # api_key: loaded from .env (LLM_API_KEY)
+    temperature: 1
+    max_tokens: 131072
 
 # ----------------------------------------------------------------------------
 # Data Paths

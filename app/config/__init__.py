@@ -4,13 +4,14 @@ Configuration module for CookHero.
 Provides unified access to all configuration settings.
 
 Usage:
-    from app.config import settings, DefaultRAGConfig
+    from app.config import settings, DefaultRAGConfig, LLMType
     
     # Access global settings
     print(settings.PROJECT_NAME)
     
-    # Access global LLM configuration
-    print(settings.llm.model_name)
+    # Access global LLM configuration (layered: fast/normal)
+    print(settings.llm.fast.model_names)
+    print(settings.llm.normal.model_names)
     
     # Access database configurations
     print(settings.database.postgres.host)
@@ -30,7 +31,7 @@ from app.config.database_config import (
     RedisConfig,
     MilvusConfig,
 )
-from app.config.llm_config import LLMProviderConfig
+from app.config.llm_config import LLMConfig, LLMType, LLMProfileConfig
 from app.config.rag_config import (
     RAGConfig,
     PathsConfig,
@@ -55,7 +56,9 @@ __all__ = [
     "RedisConfig",
     "MilvusConfig",
     # LLM configuration
-    "LLMProviderConfig",
+    "LLMConfig",
+    "LLMType",
+    "LLMProfileConfig",
     # RAG configuration classes
     "RAGConfig",
     "PathsConfig",

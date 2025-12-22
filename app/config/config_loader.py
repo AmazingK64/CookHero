@@ -22,7 +22,7 @@ from app.config.database_config import (
     PostgresConfig,
     RedisConfig,
 )
-from app.config.llm_config import LLMProviderConfig
+from app.config.llm_config import LLMConfig
 from app.config.rag_config import RAGConfig
 from app.config.web_search_config import WebSearchConfig
 
@@ -41,22 +41,35 @@ def _load_config_data() -> Dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
-def load_llm_config() -> LLMProviderConfig:
+def load_llm_config() -> LLMConfig:
     """
     Load global LLM provider configuration.
     
     Environment variables:
-    - LLM_API_KEY: API key for LLM provider
+    - LLM_API_KEY: Normal LLM API key
+    - FAST_LLM_API_KEY / LLM_FAST_API_KEY: Fast LLM API key (fallback to LLM_API_KEY)
     """
     config_data = _load_config_data()
-    llm_data = config_data.get("llm", {}) or {}
+    llm_root = config_data.get("llm", {}) or {}
+    llm_data = dict(llm_root)
 
-    # Load API key from environment
-    llm_api_key = os.getenv("LLM_API_KEY")
-    if llm_api_key:
-        llm_data["api_key"] = llm_api_key
+    # Inject API keys from environment (with inheritance for convenience)
+    normal_api_key = os.getenv("LLM_API_KEY")
+    fast_api_key = os.getenv("FAST_LLM_API_KEY") or os.getenv("LLM_FAST_API_KEY")
 
-    return LLMProviderConfig.model_validate(llm_data)
+    normal_data = dict(llm_data.get("normal", {}) or {})
+    fast_data = dict(llm_data.get("fast", {}) or {})
+
+    if normal_api_key:
+        normal_data["api_key"] = normal_api_key
+
+    if fast_api_key:
+        fast_data["api_key"] = fast_api_key
+
+    llm_data["normal"] = normal_data
+    llm_data["fast"] = fast_data
+
+    return LLMConfig.model_validate(llm_data)
 
 
 def load_database_config() -> DatabaseConfig:
@@ -103,7 +116,7 @@ def load_database_config() -> DatabaseConfig:
     )
 
 
-def load_rag_config(llm_config: LLMProviderConfig | None = None) -> RAGConfig:
+def load_rag_config(llm_config: Any | None = None) -> RAGConfig:
     """
     Load RAG configuration from YAML + environment variables.
     
@@ -111,7 +124,7 @@ def load_rag_config(llm_config: LLMProviderConfig | None = None) -> RAGConfig:
     - RERANKER_API_KEY: Dedicated reranker API key (falls back to LLM_API_KEY)
     
     Args:
-        llm_config: Global LLM config for API key fallback
+        llm_config: Global LLM config (normal profile) for API key fallback
     """
     config_data = _load_config_data()
 
@@ -137,9 +150,6 @@ def load_rag_config(llm_config: LLMProviderConfig | None = None) -> RAGConfig:
     reranker_api_key = os.getenv("RERANKER_API_KEY")
     if reranker_api_key:
         reranker_data["api_key"] = reranker_api_key
-    elif not reranker_data.get("api_key") and llm_config and llm_config.api_key:
-        # Fall back to global LLM API key
-        reranker_data["api_key"] = llm_config.api_key
     
     rag_data["reranker"] = reranker_data
 
