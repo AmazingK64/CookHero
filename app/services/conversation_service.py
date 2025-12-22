@@ -409,7 +409,7 @@ class ConversationService:
         events.append(
             self._emit_thinking(
                 ctx,
-                f"🌐 Web 搜索置信度: {decision.confidence}/10，判断: {decision.reason}",
+                f"🌐 搜索关键词: {decision.search_params.query if decision.search_params else 'None'}，搜索置信度: {decision.confidence}/10，判断: {decision.reason}",
             )
         )
 

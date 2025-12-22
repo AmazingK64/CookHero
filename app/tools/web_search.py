@@ -1,4 +1,3 @@
-# app/tools/web_search.py
 """
 Web Search Tool for CookHero.
 
@@ -7,26 +6,41 @@ Provides two core methods:
 2. execute_search() - Executes the actual web search using Tavily API
 
 Uses Tavily official Python client for reliable web search.
+Uses LLM tool calling for structured output.
 """
 
 import json
 import logging
 import os
-import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
 from app.config import settings, LLMType
 from app.llm import ChatOpenAIProvider
-from app.llm.provider import DynamicChatInvoker
 
 logger = logging.getLogger(__name__)
 
 THRESHOLD_CONFIDENCE = 6  # Confidence threshold to decide if search is needed
+
+
+class SearchDecisionInput(BaseModel):
+    """Input schema for search decision."""
+    confidence: int = Field(
+        description="Confidence score from 0-10, higher means more likely to need web search. 0-5: No web search needed, 6-10: Web search recommended",
+        ge=0,
+        le=10,
+    )
+    search_query: str = Field(
+        description="Optimized search keywords (concise and precise) suitable for web search. The number of words should be kept minimal and focused.",
+    )
+    reason: str = Field(
+        description="Brief explanation of why web search is or isn't needed"
+    )
 
 
 @dataclass
@@ -124,18 +138,6 @@ WEB_SEARCH_DECISION_PROMPT_TEMPLATE = """
 【当前问题】
 {query}
 
-【输出要求】
-
-你 **必须且只能** 输出以下 JSON，对象结构固定，不得添加或省略字段，不得输出任何多余文本：
-
-{{
-    "confidence": <0-10的整数，越高越需要Web搜索>,
-    "search_params": {{
-        "query": "<优化后的搜索关键词，应简洁精准>"
-    }},
-    "reason": "<简短说明为什么需要或不需要Web搜索>"
-}}
-
 <|assistant|>
 """
 
@@ -183,13 +185,44 @@ class WebSearchTool:
         # Initialize LLM for decision making
         self._llm_type = llm_type
         self._provider = provider or ChatOpenAIProvider(settings.llm)
-        _base_llm = self._provider.create_base_llm(llm_type, temperature=0.3)
-        self._llm = DynamicChatInvoker(self._provider, llm_type, _base_llm)
-
-        # JSON extraction regex
-        self.JSON_BLOCK_RE = re.compile(
-            r"```json\s*([\s\S]*?)\s*```", re.IGNORECASE
+        
+        # Create decision tool
+        self._decision_tool = self._create_decision_tool()
+        
+        # Create LLM and bind tools once
+        base_llm = self._provider.create_base_llm(llm_type, temperature=0.3)
+        self._llm = base_llm.bind_tools(
+            [self._decision_tool],
+            tool_choice="make_search_decision"
         )
+
+    def _create_decision_tool(self):
+        """Create the tool for search decision using @tool decorator."""
+        
+        @tool(args_schema=SearchDecisionInput)
+        def make_search_decision(
+            confidence: int,
+            search_query: str,
+            reason: str,
+        ) -> dict:
+            """
+            Make a decision on whether web search is needed.
+
+            Args:
+                confidence: Confidence score from 0-10, higher means more likely to need web search
+                search_query: Optimized search keywords (concise and precise)
+                reason: Brief explanation of why web search is or isn't needed
+
+            Returns:
+                Dictionary containing the decision details
+            """
+            return {
+                "confidence": confidence,
+                "search_query": search_query,
+                "reason": reason,
+            }
+
+        return make_search_decision
 
     @property
     def tavily_client(self) -> Optional[TavilyClient]:
@@ -200,31 +233,6 @@ class WebSearchTool:
             except Exception as e:
                 logger.error(f"Failed to initialize Tavily client: {e}")
         return self._tavily_client
-
-    def _extract_first_valid_json(self, content: str) -> Dict[str, Any]:
-        """Extract the first valid JSON object from LLM output."""
-        # Try to extract from code block first
-        for match in self.JSON_BLOCK_RE.findall(content):
-            try:
-                return json.loads(match)
-            except json.JSONDecodeError:
-                continue
-
-        # Try to parse the entire content as JSON
-        try:
-            return json.loads(content.strip())
-        except json.JSONDecodeError:
-            pass
-
-        # Try to find JSON object pattern
-        json_pattern = re.search(r"\{[\s\S]*\}", content)
-        if json_pattern:
-            try:
-                return json.loads(json_pattern.group())
-            except json.JSONDecodeError:
-                pass
-
-        raise ValueError("No valid JSON found in response")
 
     async def decide_search(
         self,
@@ -237,42 +245,61 @@ class WebSearchTool:
 
         Args:
             query: Current user query
+            document_summary: Summary of documents in local knowledge base
             history_text: Formatted conversation history
 
         Returns:
             WebSearchDecision with confidence score and search parameters
         """
         try:
+            # Format document summary
             document_summary_str = ""
             if document_summary:
                 dishes = document_summary.get("dish_name", [])
                 document_summary_str = "已知菜品名称: " + ", ".join(dishes) + "\n"
-            template = WEB_SEARCH_DECISION_PROMPT.format_prompt(
+
+            # Format prompt
+            prompt = WEB_SEARCH_DECISION_PROMPT.format_prompt(
                 query=query,
                 history=history_text,
                 document_summary=document_summary_str,
             )
-            response = await self._llm.ainvoke(template.messages)
-            raw_output = response.content.strip()
 
-            parsed = self._extract_first_valid_json(raw_output)
+            response = await self._llm.ainvoke(prompt.messages)
 
-            confidence = int(parsed.get("confidence", 0))
+            # Parse tool calls
+            if not response.tool_calls:
+                logger.warning("No tool call in response, returning low confidence")
+                return WebSearchDecision(
+                    confidence=0,
+                    search_params=None,
+                    reason="LLM未调用决策工具",
+                    raw={},
+                )
+
+            # Get first tool call result
+            tool_call = response.tool_calls[0]
+            args = tool_call["args"]
+
+            # Extract and validate confidence
+            confidence = int(args.get("confidence", 0))
             confidence = max(0, min(10, confidence))  # Clamp to 0-10
 
-            search_params = None
-            if "search_params" in parsed and parsed["search_params"]:
-                params_dict = parsed["search_params"]
-                search_params = WebSearchParams(
-                    query=params_dict.get("query", query),
-                    max_results=params_dict.get("max_results", self.max_results),
-                )
+            # Extract search query
+            search_query = args.get("search_query", query)
+            reason = args.get("reason", "")
+
+            # Create search params
+            search_params = WebSearchParams(
+                query=search_query,
+                max_results=self.max_results,
+            )
 
             return WebSearchDecision(
                 confidence=confidence,
                 search_params=search_params,
-                reason=parsed.get("reason", ""),
-                raw=parsed,
+                reason=reason,
+                raw=args,
             )
 
         except Exception as e:
@@ -306,10 +333,12 @@ class WebSearchTool:
             # Use Tavily's search method
             response = self.tavily_client.search(
                 query=search_params.query,
+                topic="general",
                 search_depth="basic",
                 max_results=search_params.max_results,
                 include_answer=False,
                 include_images=False,
+                include_raw_content=True,
             )
 
             results = []
@@ -317,7 +346,7 @@ class WebSearchTool:
                 results.append(
                     WebSearchResult(
                         title=item.get("title", ""),
-                        snippet=item.get("content", "")[:500],  # Limit snippet length
+                        snippet=item.get("content", ""),
                         source=self._extract_domain(item.get("url", "")),
                         url=item.get("url"),
                     )
