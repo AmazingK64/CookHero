@@ -61,6 +61,8 @@ class ConversationRepository:
         sources: Optional[list] = None,
         intent: Optional[str] = None,
         thinking: Optional[list] = None,
+        thinking_duration_ms: Optional[int] = None,
+        answer_duration_ms: Optional[int] = None,
     ) -> MessageModel:
         """Add a message to a conversation."""
         async with get_session_context() as session:
@@ -84,6 +86,8 @@ class ConversationRepository:
                 sources=sources,
                 intent=intent,
                 thinking=thinking,
+                thinking_duration_ms=thinking_duration_ms,
+                answer_duration_ms=answer_duration_ms,
             )
             session.add(message)
             await session.flush()

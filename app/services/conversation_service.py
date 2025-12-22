@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
 
@@ -111,6 +112,12 @@ class ChatContext:
     web_search_context: str = ""
     rag_context: str = ""
     rewritten_query: str = ""
+    
+    # Timing metrics (milliseconds)
+    thinking_start_time: Optional[float] = None
+    thinking_end_time: Optional[float] = None
+    answer_start_time: Optional[float] = None
+    answer_end_time: Optional[float] = None
 
 
 # =============================================================================
@@ -241,6 +248,9 @@ class ConversationService:
             stream: Whether to stream the response
             extra_options: Optional features like {"web_search": true}
         """
+        # Start timing thinking phase
+        tmp = time.time()
+
         # Phase 1: Initialize context
         ctx = await self._initialize_context(
             message=message,
@@ -248,11 +258,12 @@ class ConversationService:
             user_id=user_id,
             extra_options=extra_options,
         )
+        ctx.thinking_start_time = tmp
 
         # Phase 2: Intent Detection
         intent_result = await self._detect_intent(ctx)
         yield f"data: {json.dumps({'type': 'intent', 'data': {'need_rag': intent_result.need_rag, 'intent': intent_result.intent.value, 'reason': intent_result.reason}})}\n\n"
-
+        
         yield self._emit_thinking(ctx, f"🔍 意图识别完成: {intent_result.intent.value}")
         yield self._emit_thinking(ctx,
             f"📋 是否需要检索: {'是' if intent_result.need_rag else '否'}"
@@ -298,11 +309,18 @@ class ConversationService:
 
         # Generate response with all collected context
         yield self._emit_thinking(ctx, "🤖 开始生成回答...")
+        
+        # End thinking phase, start answer phase
+        ctx.thinking_end_time = time.time()
+        ctx.answer_start_time = time.time()
 
         full_response = ""
         async for chunk in self._generate_response(ctx):
             full_response += chunk
             yield f"data: {json.dumps({'type': 'text', 'content': chunk})}\n\n"
+
+        # End answer phase
+        ctx.answer_end_time = time.time()
 
         # Phase 6: Save response and complete
         await self._save_response(ctx, full_response, intent_result)
@@ -604,6 +622,16 @@ class ConversationService:
     ) -> None:
         """Save assistant response to database."""
         sources_data = [s.to_dict() for s in ctx.sources] if ctx.sources else None
+        
+        # Calculate durations in milliseconds
+        thinking_duration_ms = None
+        answer_duration_ms = None
+        
+        if ctx.thinking_start_time and ctx.thinking_end_time:
+            thinking_duration_ms = int((ctx.thinking_end_time - ctx.thinking_start_time) * 1000)
+        
+        if ctx.answer_start_time and ctx.answer_end_time:
+            answer_duration_ms = int((ctx.answer_end_time - ctx.answer_start_time) * 1000)
 
         await conversation_repository.add_message(
             conversation_id=ctx.conv_id,
@@ -612,6 +640,8 @@ class ConversationService:
             sources=sources_data,
             intent=intent_result.intent.value,
             thinking=ctx.thinking_steps if ctx.thinking_steps else None,
+            thinking_duration_ms=thinking_duration_ms,
+            answer_duration_ms=answer_duration_ms,
         )
 
     # =========================================================================
