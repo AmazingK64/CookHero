@@ -42,6 +42,9 @@ class UserModel(Base):
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     occupation: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # User personalization fields
+    profile: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    user_instruction: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
@@ -56,6 +59,8 @@ class UserModel(Base):
             "username": self.username,
             "occupation": self.occupation,
             "bio": self.bio,
+            "profile": self.profile,
+            "user_instruction": self.user_instruction,
             "created_at": self.created_at.isoformat(),
         }
 

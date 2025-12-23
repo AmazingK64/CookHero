@@ -48,6 +48,10 @@ class UserService:
                 user.occupation = data.get("occupation")
             if "bio" in data:
                 user.bio = data.get("bio")
+            if "profile" in data:
+                user.profile = data.get("profile")
+            if "user_instruction" in data:
+                user.user_instruction = data.get("user_instruction")
 
             try:
                 await session.flush()

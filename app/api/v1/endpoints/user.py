@@ -18,12 +18,16 @@ class UserProfile(BaseModel):
     username: str
     occupation: Optional[str] = None
     bio: Optional[str] = None
+    profile: Optional[str] = None
+    user_instruction: Optional[str] = None
 
 
 class UpdateProfileRequest(BaseModel):
     username: Optional[str] = None
     occupation: Optional[str] = None
     bio: Optional[str] = None
+    profile: Optional[str] = None
+    user_instruction: Optional[str] = None
 
 
 def _get_identity_from_auth(authorization: Optional[str] = Header(None)) -> dict:
@@ -43,7 +47,13 @@ async def get_profile(identity: dict = Depends(_get_identity_from_auth)):
     user = await user_service.get_user_by_username(identity["username"])
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return UserProfile(username=user.username, occupation=user.occupation, bio=user.bio)
+    return UserProfile(
+        username=user.username,
+        occupation=user.occupation,
+        bio=user.bio,
+        profile=user.profile,
+        user_instruction=user.user_instruction
+    )
 
 
 @router.put("/user/profile", response_model=UserProfile)
@@ -52,4 +62,10 @@ async def update_profile(req: UpdateProfileRequest, identity: dict = Depends(_ge
         user = await user_service.update_profile(identity["username"], req.dict(exclude_unset=True))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return UserProfile(username=user.username, occupation=user.occupation, bio=user.bio)
+    return UserProfile(
+        username=user.username,
+        occupation=user.occupation,
+        bio=user.bio,
+        profile=user.profile,
+        user_instruction=user.user_instruction
+    )

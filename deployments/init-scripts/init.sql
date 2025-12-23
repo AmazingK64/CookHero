@@ -65,6 +65,11 @@ ALTER TABLE users
   ADD COLUMN IF NOT EXISTS occupation VARCHAR(100),
   ADD COLUMN IF NOT EXISTS bio TEXT;
 
+-- Add user personalization columns for AI context
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS profile TEXT,
+  ADD COLUMN IF NOT EXISTS user_instruction TEXT;
+
 -- Optional: index on occupation for filtering
 CREATE INDEX IF NOT EXISTS ix_users_occupation ON users(occupation);
 

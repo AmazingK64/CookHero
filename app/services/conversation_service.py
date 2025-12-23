@@ -17,6 +17,7 @@ from app.conversation import (
     conversation_repository,
 )
 from app.services.rag_service import rag_service_instance, RetrievalResult
+from app.services.user_service import user_service
 from app.tools.web_search import (
     WebSearchDecision,
     WebSearchResult,
@@ -105,6 +106,10 @@ class ChatContext:
     history_text: str
     compressed_summary: Optional[str]
     compressed_count: int
+
+    # User personalization context
+    user_profile: Optional[str] = None
+    user_instruction: Optional[str] = None
 
     # Mutable state during processing
     sources: List[UnifiedSource] = field(default_factory=list)
@@ -380,6 +385,15 @@ class ConversationService:
             compressed_summary=compressed_summary,
         )
 
+        # Load user personalization context
+        user_profile = None
+        user_instruction = None
+        if user_id:
+            user_data = await user_service.get_user_by_id(user_id)
+            if user_data:
+                user_profile = user_data.profile
+                user_instruction = user_data.user_instruction
+
         return ChatContext(
             conv_id=conv_id,
             message=message,
@@ -390,6 +404,8 @@ class ConversationService:
             history_text=history_text,
             compressed_summary=compressed_summary,
             compressed_count=compressed_count,
+            user_profile=user_profile,
+            user_instruction=user_instruction,
         )
 
     # =========================================================================
@@ -398,7 +414,7 @@ class ConversationService:
 
     async def _detect_intent(self, ctx: ChatContext) -> IntentDetectionResult:
         """Detect user intent from message and history."""
-        return await self.intent_detector.detect(ctx.message, ctx.history_text)
+        return await self.intent_detector.detect(ctx.history_text)
 
     # =========================================================================
     # Phase 3: Web Search Processing
@@ -605,6 +621,8 @@ class ConversationService:
             compressed_count=ctx.compressed_count,
             compressed_summary=ctx.compressed_summary,
             extra_system_prompt=context_prompt,
+            user_profile=ctx.user_profile,
+            user_instruction=ctx.user_instruction,
         )
 
         async for chunk in self.llm_orchestrator.stream(messages_for_llm):
