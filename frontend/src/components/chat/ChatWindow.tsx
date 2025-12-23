@@ -104,18 +104,14 @@ function EmptyState({
   return (
     <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 animate-in fade-in duration-500">
       {/* Hero Section */}
-      <div className="relative mb-8">
-        <div className="w-24 h-24 bg-gradient-to-br from-orange-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg">
-          <ChefHat className="w-12 h-12 text-white" />
+      <div className="relative mb-8 group">
+        <div className="w-28 h-28 bg-gradient-to-br from-orange-400 via-red-400 to-amber-500 rounded-3xl flex items-center justify-center shadow-2xl backdrop-blur-sm border border-white/20 transition-all duration-500 group-hover:scale-105 group-hover:rotate-3">
+            <ChefHat className="w-16 h-16 text-white drop-shadow-xl" />
         </div>
-        <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-500 rounded-lg flex items-center justify-center shadow-sm">
-          <Sparkles className="w-4 h-4 text-white" />
+        <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-gradient-to-br from-orange-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg">
+            <Sparkles className="w-5 h-5 text-white" />
         </div>
       </div>
-
-      <h2 className="text-3xl font-bold mb-2 text-gray-800 dark:text-gray-100">
-        Welcome to CookHero
-      </h2>
 
       {/* Feature Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-3xl mb-8">
