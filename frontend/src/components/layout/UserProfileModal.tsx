@@ -20,6 +20,8 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
   const [username, setUsername] = useState('');
   const [occupation, setOccupation] = useState('');
   const [bio, setBio] = useState('');
+  const [profile, setProfile] = useState('');
+  const [userInstruction, setUserInstruction] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | string[] | null>(null);
   const [activeTab, setActiveTab] = useState<'general' | 'appearance'>('general');
@@ -34,6 +36,8 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
         setUsername(res.username || '');
         setOccupation(res.occupation || '');
         setBio(res.bio || '');
+        setProfile(res.profile || '');
+        setUserInstruction(res.user_instruction || '');
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
@@ -47,7 +51,7 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
     if (!token) return setError('Not authenticated');
     setLoading(true);
     try {
-      const res = await updateProfile({ username, occupation, bio }, token);
+      const res = await updateProfile({ username, occupation, bio, profile, user_instruction: userInstruction }, token);
       if (ctxUpdate) {
         await ctxUpdate({
           username: res.username,
@@ -144,7 +148,16 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
             )}
 
             {activeTab === 'appearance' && (
-              <AppearanceTab isDark={isDark} toggleTheme={toggleTheme} />
+              <AppearanceTab
+                isDark={isDark}
+                toggleTheme={toggleTheme}
+                profile={profile}
+                userInstruction={userInstruction}
+                loading={loading}
+                onProfileChange={setProfile}
+                onUserInstructionChange={setUserInstruction}
+                onSave={handleSave}
+              />
             )}
           </div>
         </div>
@@ -293,40 +306,93 @@ function FormField({
 function AppearanceTab({
   isDark,
   toggleTheme,
+  profile,
+  userInstruction,
+  loading,
+  onProfileChange,
+  onUserInstructionChange,
+  onSave,
 }: {
   isDark: boolean;
   toggleTheme: () => void;
+  profile: string;
+  userInstruction: string;
+  loading: boolean;
+  onProfileChange: (value: string) => void;
+  onUserInstructionChange: (value: string) => void;
+  onSave: () => void;
 }) {
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-          个性化
-        </p>
-        <h4 className="text-xl font-semibold text-gray-900 dark:text-gray-50">
-          外观
-        </h4>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          切换浅色 / 深色主题，后续将扩展更多外观选项。
-        </p>
-      </div>
+    <>
+      <div className="flex-1 overflow-y-auto pr-1">
 
-      <div className="mt-4 flex items-center justify-between gap-4">
-        <div>
-          <div className="text-sm font-medium text-gray-800 dark:text-gray-100">
-            主题模式
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-gray-800 dark:text-gray-100">
+              主题模式
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              当前：{isDark ? '深色' : '浅色'}
+            </div>
           </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            当前：{isDark ? '深色' : '浅色'}
+          <button
+            onClick={toggleTheme}
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          >
+            切换为{isDark ? '浅色' : '深色'}
+          </button>
+        </div>
+
+        {/* AI 个性化设置 */}
+        <div className="mt-8 pt-6 border-t border-gray-200/80 dark:border-gray-800/80">
+          <div className="space-y-2">
+            <h4 className="text-xl font-semibold text-gray-900 dark:text-gray-50">
+              AI 助手个性化
+            </h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              配置 AI 助手对你的了解和回答风格偏好,设置后将在所有对话中自动生效。
+            </p>
+          </div>
+
+          <div className="mt-4 space-y-4">
+            <FormField label="个人信息 (Profile)">
+              <textarea
+                value={profile}
+                onChange={(e) => onProfileChange(e.target.value)}
+                rows={4}
+                placeholder="描述你的背景、偏好、饮食习惯等,例如: 我是素食主义者,偏好清淡口味,家里有两个孩子..."
+                className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white/5 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-shadow"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                用于描述你的基本背景、身份、饮食偏好等个人特征
+              </p>
+            </FormField>
+
+            <FormField label="自定义指令 (User Instruction)">
+              <textarea
+                value={userInstruction}
+                onChange={(e) => onUserInstructionChange(e.target.value)}
+                rows={5}
+                placeholder="定义你希望 AI 遵循的回答风格和规则,例如: 请用简洁的语言回答,多使用emoji,优先推荐30分钟内能完成的快手菜..."
+                className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white/5 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-shadow"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                定义 AI 的回答风格、输出格式、关注重点等长期偏好
+              </p>
+            </FormField>
           </div>
         </div>
+      </div>
+
+      <div className="pt-3 flex justify-end shrink-0">
         <button
-          onClick={toggleTheme}
-          className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          onClick={onSave}
+          disabled={loading}
+          className="px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-medium disabled:opacity-70 transition-colors shadow-sm"
         >
-          切换为{isDark ? '浅色' : '深色'}
+          {loading ? '保存中...' : '保存'}
         </button>
       </div>
-    </div>
+    </>
   );
 }
