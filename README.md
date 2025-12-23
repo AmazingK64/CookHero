@@ -12,6 +12,14 @@
 
 简体中文 | [English](./docs/README_EN.md)
 
+---
+
+</div>
+
+<div align="center">
+
+<img src="./docs/example.gif" alt="CookHero Demo" width="960" height="540">
+
 </div>
 
 ---
@@ -27,12 +35,6 @@
 - 🌐 **实时搜索**：结合 Web 搜索获取最新烹饪资讯和趋势
 
 CookHero 面向厨房新手、健身爱好者、健康饮食倡导者、过敏体质用户等多种人群，致力于让烹饪变得简单、科学、有趣。
-
-<div align="center">
-
-<img src="./docs/example.gif" alt="CookHero Demo" width="640" height="360">
-
-</div>
 
 ---
 
