@@ -66,8 +66,8 @@ class ContextManager:
         Build LLM messages with proper context assembly.
         
         Context structure:
-        1. System Message (base prompt)
-        2. User personalization context (profile + instruction) - high priority
+        1. User personalization context (profile + instruction) - high priority
+        2. System Message (base prompt)
         3. System Message with compressed summary (if exists)
         4. Uncompressed Messages (history[compressed_count:])
         5. Extra system prompt (e.g., RAG context) - appended at end
@@ -83,12 +83,15 @@ class ContextManager:
         Returns:
             List of LangChain BaseMessage objects ready for LLM
         """
-        result: List[BaseMessage] = [SystemMessage(content=self.system_prompt)]
+        result: List[BaseMessage] = []
         
         # Add user personalization context (high priority, right after base system prompt)
         if user_profile or user_instruction:
             personalization_prompt = self._format_user_personalization(user_profile, user_instruction)
             result.append(SystemMessage(content=personalization_prompt))
+
+        # Add base system prompt
+        result.append(SystemMessage(content=self.system_prompt))
         
         # Add compressed summary if available
         if compressed_summary:
