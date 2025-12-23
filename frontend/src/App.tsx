@@ -177,10 +177,10 @@ function MainLayout({ children }: { children: React.ReactNode }) {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2">
+            {/* <div className="flex items-center gap-2">
               <span className="text-2xl">🍳</span>
               <h1 className="font-bold text-gray-800 dark:text-gray-100">CookHero</h1>
-            </div>
+            </div> */}
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-300">
             {!isKnowledgeView && conversationId && (

@@ -21,6 +21,5 @@ export { ChatInput } from './chat';
 export { ChatWindow } from './chat';
 export { MessageBubble } from './chat';
 export { MarkdownRenderer } from './chat';
-export { Header } from './layout';
 export { Sidebar } from './layout';
 
