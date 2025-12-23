@@ -253,6 +253,4 @@ This project is licensed under the [APACHE LICENSE 2.0](LICENSE). See the LICENS
 
 **If this project helps you, please give it a ⭐️ Star!**
 
-Made with ❤️ by CookHero Team
-
 </div>

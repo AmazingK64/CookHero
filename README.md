@@ -233,6 +233,4 @@ npm run lint    # 代码检查
 
 **如果这个项目对您有帮助，请给一个 ⭐️ Star 支持一下！**
 
-Made with ❤️ by CookHero Team
-
 </div>
