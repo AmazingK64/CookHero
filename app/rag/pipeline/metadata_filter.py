@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 FILTER_EXPRESSION_PROMPT = ChatPromptTemplate.from_template(
 """
-<|system|>
 你是 CookHero 的「Milvus 元数据过滤表达式生成器」。
 
 你的任务是：**根据用户查询，判断是否可以生成一个可直接用于 Milvus `expr` 参数的布尔过滤表达式**。
@@ -78,8 +77,7 @@ FILTER_EXPRESSION_PROMPT = ChatPromptTemplate.from_template(
 【可用元数据取值】
 {metadata_schema}
 
-<|user|>
-用户查询：
+当前查询：
 {query}
 
 【输出格式（强约束）】
@@ -97,8 +95,6 @@ FILTER_EXPRESSION_PROMPT = ChatPromptTemplate.from_template(
 {{
   "expr": "NONE"
 }}
-
-<|assistant|>
 """
 )
 

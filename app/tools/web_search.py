@@ -99,7 +99,6 @@ class WebSearchResult:
 
 # Prompt template for web search decision
 WEB_SEARCH_DECISION_PROMPT_TEMPLATE = """
-<|system|>
 你是 CookHero 的「Web 搜索决策模块」，专门判断当前用户问题是否需要进行互联网搜索来补充回答。
 
 【决策原则】
@@ -131,14 +130,7 @@ WEB_SEARCH_DECISION_PROMPT_TEMPLATE = """
 【本地知识库已有的信息】
 {document_summary}
 
-<|user|>
-【对话历史】
 {history}
-
-【当前问题】
-{query}
-
-<|assistant|>
 """
 
 WEB_SEARCH_DECISION_PROMPT = ChatPromptTemplate.from_template(
@@ -260,11 +252,9 @@ class WebSearchTool:
 
             # Format prompt
             prompt = WEB_SEARCH_DECISION_PROMPT.format_prompt(
-                query=query,
                 history=history_text,
                 document_summary=document_summary_str,
             )
-
             response = await self._llm.ainvoke(prompt.messages)
 
             # Parse tool calls
