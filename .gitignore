@@ -32,3 +32,7 @@ CODEBUDDY.md
 /data/debug/
 
 .clineignore
+
+# Logs
+logs/
+blog/
