@@ -182,15 +182,15 @@ function MainLayout({ children }: { children: React.ReactNode }) {
               <h1 className="font-bold text-gray-800 dark:text-gray-100">CookHero</h1>
             </div> */}
           </div>
-          <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-300">
+          <div className="flex items-center gap-1.5 sm:gap-3 text-xs text-gray-600 dark:text-gray-300 overflow-hidden">
             {!isKnowledgeView && conversationId && (
-              <span className="font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded break-all whitespace-pre-wrap">
+              <span className="hidden sm:inline font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded truncate" title={conversationId}>
                 ID: {conversationId}
               </span>
             )}
             <button
               onClick={toggleMainView}
-              className={`flex items-center gap-1 px-3 py-1 rounded-full border transition-colors ${
+              className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full border transition-colors shrink-0 ${
                 isKnowledgeView
                   ? 'border-orange-400 bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-200 dark:border-orange-600'
                   : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -199,25 +199,25 @@ function MainLayout({ children }: { children: React.ReactNode }) {
               {isKnowledgeView ? (
                 <>
                   <MessageSquare className="w-4 h-4" />
-                  <span>返回对话</span>
+                  <span className="hidden sm:inline">返回对话</span>
                 </>
               ) : (
                 <>
                   <BookOpen className="w-4 h-4" />
-                  <span>知识库</span>
+                  <span className="hidden sm:inline">知识库</span>
                 </>
               )}
             </button>
             {username && (
-              <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
-                <span className="font-semibold">{username}</span>
+              <div className="flex items-center gap-1 sm:gap-2 bg-gray-100 dark:bg-gray-800 px-2 sm:px-3 py-1 rounded-full shrink-0">
+                <span className="font-semibold hidden sm:inline">{username}</span>
                 <button
                   onClick={handleLogout}
                   className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-100 flex items-center gap-1"
                   title="Log out"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>Logout</span>
+                  <span className="hidden md:inline">Logout</span>
                 </button>
               </div>
             )}
