@@ -44,6 +44,7 @@ from app.config.rag_config import (
     HowToCookConfig,
 )
 from app.config.web_search_config import WebSearchConfig
+from app.config.vision_config import VisionConfig, VisionModelConfig
 
 __all__ = [
     # Main settings
@@ -71,4 +72,7 @@ __all__ = [
     "HowToCookConfig",
     # Web Search configuration
     "WebSearchConfig",
+    # Vision configuration
+    "VisionConfig",
+    "VisionModelConfig",
 ]

@@ -16,6 +16,10 @@ export interface Message {
   thinkingEndTime?: number;   // Unix timestamp in ms when thinking ended
   answerStartTime?: number;   // Unix timestamp in ms when answer generation started
   answerEndTime?: number;     // Unix timestamp in ms when answer generation ended
+  // Image attachments (base64 encoded)
+  images?: string[];
+  // Vision analysis result
+  vision?: VisionInfo;
 }
 
 /**
@@ -35,6 +39,23 @@ export interface IntentInfo {
   need_rag: boolean;
   intent: string;
   reason: string;
+}
+
+/**
+ * Vision analysis result from image processing.
+ */
+export interface VisionInfo {
+  is_food_related: boolean;
+  intent: string;
+  description: string;
+  extracted_info?: {
+    dish_name?: string;
+    ingredients?: string[];
+    cooking_stage?: string;
+    other?: string;
+  };
+  direct_response?: string;
+  confidence: number;
 }
 
 export interface ConversationSummary {

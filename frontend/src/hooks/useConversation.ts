@@ -12,10 +12,12 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type {
   Message,
   IntentInfo,
+  VisionInfo,
   Source,
   ConversationSummary,
   ConversationHistoryResponse,
   ExtraOptions,
+  ImageData,
 } from '../types';
 import {
   deleteConversation,
@@ -251,8 +253,8 @@ export function useConversation(token?: string) {
     []
   );
 
-  const sendMessage = useCallback(async (content: string, extraOptions?: ExtraOptions) => {
-    if (!content.trim() || isLoading) return;
+  const sendMessage = useCallback(async (content: string, extraOptions?: ExtraOptions, images?: ImageData[]) => {
+    if ((!content.trim() && (!images || images.length === 0)) || isLoading) return;
     if (!token) {
       setError('Please log in to start chatting.');
       return;
@@ -265,12 +267,13 @@ export function useConversation(token?: string) {
     // Create abort controller for this specific conversation's request
     const abortController = new AbortController();
 
-    // Add user message
+    // Add user message (include images as base64 preview URLs)
     const userMessage: Message = {
       id: generateId(),
       role: 'user',
       content: content.trim(),
       timestamp: new Date(),
+      images: images?.map(img => `data:${img.mime_type};base64,${img.data}`),
     };
     
     // Create assistant message placeholder (no content until LLM starts streaming)
@@ -352,6 +355,7 @@ export function useConversation(token?: string) {
     try {
       let currentContent = '';
       let currentIntent: IntentInfo | undefined;
+      let currentVision: VisionInfo | undefined;
       let currentSources: Source[] = [];
       let currentThinking: string[] = [];
       
@@ -364,6 +368,7 @@ export function useConversation(token?: string) {
         message: content,
         conversation_id: conversationId,
         extra_options: extraOptions,
+        images: images,
       }, token, abortController.signal)) {
         // Check if aborted
         if (abortController.signal.aborted) {
@@ -371,6 +376,18 @@ export function useConversation(token?: string) {
         }
 
         switch (event.type) {
+          case 'vision':
+            currentVision = event.data as VisionInfo;
+            updateStreamingState(
+              msgs => msgs.map(msg =>
+                msg.id === assistantMessageId
+                  ? { ...msg, vision: currentVision }
+                  : msg
+              ),
+              true
+            );
+            break;
+
           case 'intent':
             currentIntent = event.data as IntentInfo;
             updateStreamingState(
