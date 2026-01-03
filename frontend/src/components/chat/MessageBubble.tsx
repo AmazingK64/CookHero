@@ -184,6 +184,19 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 : 'prose prose-sm dark:prose-invert max-w-none text-gray-800 dark:text-gray-100 px-0 py-0'
             }`}
           >
+            {/* User Images (displayed before text) */}
+            {isUser && message.images && message.images.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {message.images.map((img, idx) => (
+                  <img
+                    key={idx}
+                    src={img}
+                    alt={`Uploaded image ${idx + 1}`}
+                    className="max-w-[200px] max-h-[200px] rounded-lg object-cover"
+                  />
+                ))}
+              </div>
+            )}
             <MarkdownRenderer content={message.content.trim()} />
           </div>
         )}
