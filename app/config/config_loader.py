@@ -25,6 +25,7 @@ from app.config.database_config import (
 from app.config.llm_config import LLMConfig
 from app.config.rag_config import RAGConfig
 from app.config.web_search_config import WebSearchConfig
+from app.config.vision_config import VisionConfig, VisionModelConfig
 
 
 # Load .env file into environment variables at module import
@@ -182,3 +183,23 @@ def load_web_search_config() -> WebSearchConfig:
         ws_data["api_key"] = api_key
     
     return WebSearchConfig.model_validate(ws_data)
+
+
+def load_vision_config() -> VisionConfig:
+    """
+    Load vision/multimodal configuration from YAML + environment variables.
+    
+    Environment variables:
+    - VISION_API_KEY: Vision model API key (falls back to LLM_API_KEY)
+    """
+    config_data = _load_config_data()
+    vision_data = dict(config_data.get("vision", {}) or {})
+    model_data = dict(vision_data.get("model", {}) or {})
+    
+    # Load API key from environment with fallback
+    api_key = os.getenv("VISION_API_KEY") or os.getenv("LLM_API_KEY")
+    if api_key:
+        model_data["api_key"] = api_key
+    
+    vision_data["model"] = model_data
+    return VisionConfig.model_validate(vision_data)

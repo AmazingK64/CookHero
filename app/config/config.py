@@ -17,11 +17,13 @@ from app.config.database_config import DatabaseConfig
 from app.config.llm_config import LLMConfig
 from app.config.rag_config import RAGConfig
 from app.config.web_search_config import WebSearchConfig
+from app.config.vision_config import VisionConfig
 from app.config.config_loader import (
     load_database_config,
     load_llm_config,
     load_rag_config,
     load_web_search_config,
+    load_vision_config,
 )
 
 
@@ -65,6 +67,9 @@ class Settings(BaseModel):
     
     # Web Search configuration loaded from config.yml
     web_search: WebSearchConfig = load_web_search_config()
+    
+    # Vision/Multimodal configuration loaded from config.yml
+    vision: VisionConfig = load_vision_config()
     
     class Config:
         arbitrary_types_allowed = True
