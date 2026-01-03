@@ -2,7 +2,13 @@
  * API-related type definitions
  */
 
-import type { IntentInfo, Source } from './chat';
+import type { IntentInfo, Source, VisionInfo } from './chat';
+
+/** Image data for multimodal requests */
+export interface ImageData {
+  data: string;  // Base64 encoded image data
+  mime_type: string;  // MIME type of the image
+}
 
 /** Extra options that can be enabled per request */
 export interface ExtraOptions {
@@ -17,12 +23,13 @@ export interface ConversationRequest {
   conversation_id?: string;
   stream?: boolean;
   extra_options?: ExtraOptions;
+  images?: ImageData[];  // Images for multimodal understanding
 }
 
 export interface SSEEvent {
-  type: 'intent' | 'thinking' | 'text' | 'sources' | 'done';
+  type: 'vision' | 'intent' | 'thinking' | 'text' | 'sources' | 'done';
   content?: string;
-  data?: IntentInfo | Source[] | string;
+  data?: VisionInfo | IntentInfo | Source[] | string;
   conversation_id?: string;
 }
 
