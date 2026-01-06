@@ -1,12 +1,13 @@
 // src/App.tsx
 import { useEffect, useState, useCallback, useRef } from 'react';
 import type { ReactElement } from 'react';
-import { BookOpen, Menu, LogOut, MessageSquare } from 'lucide-react';
+import { BarChart3, BookOpen, Menu, LogOut, MessageSquare } from 'lucide-react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ChatWindow, ChatInput, Sidebar, KnowledgePanel } from './components';
 import { useTheme, useAuth, useConversationContext } from './contexts';
 import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
+import EvaluationPage from './pages/Evaluation';
 
 /**
  * Chat view component - handles both new chat and existing conversation
@@ -114,6 +115,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 
   // Determine current view from pathname
   const isKnowledgeView = location.pathname === '/knowledge';
+  const isEvaluationView = location.pathname === '/evaluation';
 
   const handleNewChat = useCallback(() => {
     clearMessages();
@@ -137,7 +139,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   }, [logout, navigate]);
 
   const toggleMainView = useCallback(() => {
-    if (isKnowledgeView) {
+    if (isKnowledgeView || isEvaluationView) {
       // Return to chat - if there's a current conversation, go to it
       if (conversationId && !conversationId.startsWith('temp-')) {
         navigate(`/chat/${conversationId}`);
@@ -147,7 +149,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
     } else {
       navigate('/knowledge');
     }
-  }, [isKnowledgeView, conversationId, navigate]);
+  }, [isKnowledgeView, isEvaluationView, conversationId, navigate]);
 
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
@@ -183,11 +185,22 @@ function MainLayout({ children }: { children: React.ReactNode }) {
             </div> */}
           </div>
           <div className="flex items-center gap-1.5 sm:gap-3 text-xs text-gray-600 dark:text-gray-300 overflow-hidden">
-            {!isKnowledgeView && conversationId && (
+            {!isKnowledgeView && !isEvaluationView && conversationId && (
               <span className="hidden sm:inline font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded truncate" title={conversationId}>
                 ID: {conversationId}
               </span>
             )}
+            <button
+              onClick={() => navigate('/evaluation')}
+              className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full border transition-colors shrink-0 ${
+                isEvaluationView
+                  ? 'border-orange-400 bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-200 dark:border-orange-600'
+                  : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              <span className="hidden sm:inline">评估</span>
+            </button>
             <button
               onClick={toggleMainView}
               className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full border transition-colors shrink-0 ${
@@ -273,6 +286,16 @@ function App() {
           <RequireAuth>
             <MainLayout>
               <KnowledgePanel />
+            </MainLayout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/evaluation"
+        element={
+          <RequireAuth>
+            <MainLayout>
+              <EvaluationPage />
             </MainLayout>
           </RequireAuth>
         }
