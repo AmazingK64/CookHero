@@ -34,6 +34,7 @@ api/
     └── endpoints/
         ├── auth.py           # 用户认证接口（注册、登录、令牌刷新）
         ├── conversation.py   # 对话接口（创建、查询、流式响应）
+        ├── evaluation.py     # RAG 评估接口（统计、趋势、告警）
         ├── personal_docs.py  # 个人文档接口（上传、删除、列表）
         └── user.py          # 用户信息接口（获取、更新）
 ```
@@ -53,8 +54,10 @@ config/
 ├── config_loader.py      # 配置加载器（从 config.yml 和 .env 加载）
 ├── config.py             # 全局配置类
 ├── database_config.py    # 数据库配置（PostgreSQL, Redis, Milvus）
+├── evaluation_config.py  # RAG 评估配置（RAGAS 指标、采样率、告警阈值）
 ├── llm_config.py         # LLM 提供商配置（fast/normal 两层）
 ├── rag_config.py         # RAG 管道配置（检索参数、重排序）
+├── vision_config.py      # 视觉模型配置（多模态支持）
 └── web_search_config.py  # Web 搜索配置（Tavily）
 ```
 
@@ -102,9 +105,10 @@ context/
 
 ```
 database/
-├── models.py             # ORM 模型（User, Conversation, Message 等）
+├── models.py             # ORM 模型（User, Conversation, Message, RAGEvaluation 等）
 ├── session.py            # 数据库会话管理（连接池、事务）
-└── document_repository.py # 文档仓库（元数据缓存、CRUD）
+├── document_repository.py # 文档仓库（元数据缓存、CRUD）
+└── evaluation_repository.py # 评估仓库（RAG 评估记录 CRUD）
 ```
 
 **职责**：
@@ -202,6 +206,7 @@ vector_stores/
 services/
 ├── auth_service.py           # 认证服务（注册、登录、JWT）
 ├── conversation_service.py   # 对话服务（会话管理、消息处理）
+├── evaluation_service.py     # RAG 评估服务（RAGAS 框架集成）
 ├── rag_service.py            # RAG 服务（检索、生成）
 ├── personal_document_service.py # 个人文档服务（上传、索引）
 └── user_service.py           # 用户服务（用户信息管理）
@@ -247,6 +252,23 @@ utils/
 - 中间件配置（CORS、异常处理）
 - 路由注册
 - 生命周期管理（数据库初始化、缓存清理）
+
+---
+
+### 2.12 视觉模块 (`app/vision/`) 🆕
+
+```
+vision/
+├── __init__.py           # 模块初始化
+├── agent.py              # 视觉 Agent（图片分析、意图识别）
+└── provider.py           # 视觉模型提供商（OpenAI 兼容 API）
+```
+
+**职责**：
+- 处理用户上传的图片
+- 识别菜品、食材等食物相关内容
+- 结合文字理解用户完整意图
+- 支持多种视觉意图分类（菜品识别、食谱查询、烹饪指导等）
 
 ---
 
@@ -322,7 +344,8 @@ tests/
 ├── test_rag.py           # RAG 系统测试
 ├── test_llm_api.py       # LLM API 调用测试
 ├── test_deep_agent.py    # Agent 功能测试
-└── test_user_personalization.py # 用户个性化测试
+├── test_user_personalization.py # 用户个性化测试
+└── test_vision.py        # 视觉模块测试
 ```
 
 **职责**：
@@ -414,6 +437,23 @@ Python 依赖列表，包含所有后端依赖的精确版本号。
 8. **重排序**：`siliconflow_reranker.py` 精排结果
 9. **生成答案**：`generation.py` 调用 LLM 生成回复
 10. **返回结果**：流式或完整返回给前端
+
+### 图片分析流程（多模态）🆕
+
+1. **用户上传**：前端发送图片 + 文字到 `/api/v1/conversation/query`
+2. **视觉分析**：`vision/agent.py` 分析图片内容
+3. **意图识别**：判断是否与食物相关，分类用户意图
+4. **信息提取**：提取菜品名、食材等关键信息
+5. **流程衔接**：食物相关则继续 RAG 流程，否则直接响应
+6. **结果生成**：结合视觉信息和检索结果生成答案
+
+### RAG 评估流程 🆕
+
+1. **响应生成后**：根据采样率决定是否评估
+2. **异步提交**：`evaluation_service.py` 后台异步执行
+3. **指标计算**：使用 RAGAS 计算 Faithfulness 和 Answer Relevancy
+4. **结果存储**：`evaluation_repository.py` 保存到 PostgreSQL
+5. **告警检查**：指标低于阈值时触发告警
 
 ---
 

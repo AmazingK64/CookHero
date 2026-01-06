@@ -11,6 +11,11 @@
 
 [简体中文](README.md) | English
 
+<div align="center">
+<p align="center">
+  <img src="./docs/example.gif" width="48%">
+  <img src="./docs/show.jpg" width="48%">
+</p>
 </div>
 
 ---
@@ -60,6 +65,19 @@ CookHero targets kitchen beginners, fitness enthusiasts, health-conscious users,
 ### 6. User System
 - User registration/login (JWT authentication)
 - Session management (multi-session isolation, history saving)
+
+### 7. Multimodal Support 🆕
+- **Image Recognition**: Upload food/ingredient images for intelligent identification
+- **Intent Understanding**: Combine images and text to understand complete user intent
+- **Multiple Scenarios**: Dish identification, ingredient recognition, cooking guidance, recipe queries
+- **Flexible Integration**: Support for OpenAI-compatible vision model APIs
+
+### 8. RAG Evaluation System 🆕
+- **Quality Monitoring**: Automated evaluation based on the RAGAS framework
+- **Core Metrics**: Faithfulness, Answer Relevancy
+- **Async Evaluation**: Background asynchronous execution without affecting response speed
+- **Trend Analysis**: Support for evaluation trend viewing and quality alerts
+- **Data Persistence**: Evaluation results stored in PostgreSQL
 
 ---
 
@@ -213,7 +231,9 @@ npm run lint    # Code linting
 
 ## 🗺️ Roadmap
 
-- [ ] **Multimodal Support**: Ingredient image recognition, dish image generation
+- [x] **Multimodal Support**: Ingredient image recognition, dish identification ✅
+- [x] **RAG Evaluation System**: Quality monitoring based on RAGAS ✅
+- [ ] **Dish Image Generation**: AI-generated dish effect images
 - [ ] **Voice Interaction**: Voice input queries, voice step narration
 - [ ] **Nutrition Analysis**: Automatic calculation of calories and nutrients
 - [ ] **Community Features**: User sharing, ratings, comments
