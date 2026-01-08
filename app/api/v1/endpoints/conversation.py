@@ -1,20 +1,32 @@
 # app/api/v1/endpoints/conversation.py
 """
 Conversation API endpoints for multi-turn chat with RAG integration.
+Includes security features: input validation, prompt injection protection.
 """
 
 import asyncio
+import base64
 import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from app.config import settings
 from app.services.conversation_service import conversation_service
+from app.security.prompt_guard import prompt_guard, ThreatLevel
+from app.security.guardrails import guard as nemo_guard, GuardResult
+from app.security.audit import audit_logger
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Constants for input validation
+MAX_MESSAGE_LENGTH = settings.MAX_MESSAGE_LENGTH  # 10000 characters
+MAX_IMAGE_SIZE_MB = settings.MAX_IMAGE_SIZE_MB  # 5 MB
+MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 
 class ImageData(BaseModel):
@@ -22,17 +34,49 @@ class ImageData(BaseModel):
     data: str  # Base64 encoded image data
     mime_type: str = "image/jpeg"  # MIME type of the image
 
+    @field_validator("mime_type")
+    @classmethod
+    def validate_mime_type(cls, v: str) -> str:
+        """Validate image MIME type."""
+        if v not in ALLOWED_IMAGE_TYPES:
+            raise ValueError(f"不支持的图片类型: {v}. 支持: {', '.join(ALLOWED_IMAGE_TYPES)}")
+        return v
+
+    @field_validator("data")
+    @classmethod
+    def validate_image_size(cls, v: str) -> str:
+        """Validate base64 image size."""
+        try:
+            # Calculate approximate decoded size
+            decoded_size = len(v) * 3 / 4
+            if decoded_size > MAX_IMAGE_SIZE_BYTES:
+                raise ValueError(f"图片大小超过限制 ({MAX_IMAGE_SIZE_MB}MB)")
+        except Exception:
+            pass  # If we can't calculate size, let it through for now
+        return v
+
 
 class ConversationRequest(BaseModel):
     """Request model for conversation endpoint."""
-    message: str
+    message: str = Field(..., max_length=MAX_MESSAGE_LENGTH)
     conversation_id: Optional[str] = None
     stream: bool = True
     extra_options: Optional[Dict[str, Any]] = None  # e.g., {"web_search": true}
     images: Optional[List[ImageData]] = Field(
         default=None,
-        description="List of images (base64 encoded) for multimodal understanding"
+        description="List of images (base64 encoded) for multimodal understanding",
+        max_length=5,  # Max 5 images per request
     )
+
+    @field_validator("message")
+    @classmethod
+    def validate_message(cls, v: str) -> str:
+        """Validate message content."""
+        if not v or not v.strip():
+            raise ValueError("消息不能为空")
+        if len(v) > MAX_MESSAGE_LENGTH:
+            raise ValueError(f"消息长度超过限制 ({MAX_MESSAGE_LENGTH} 字符)")
+        return v
 
 
 class ConversationHistoryResponse(BaseModel):
@@ -55,17 +99,17 @@ class ConversationSummary(BaseModel):
 async def conversation(request: ConversationRequest, http_request: Request):
     """
     Handle a conversation message with optional RAG integration.
-    
-    The endpoint automatically detects whether the query needs knowledge 
+
+    The endpoint automatically detects whether the query needs knowledge
     base retrieval (RAG) or can be answered directly by the LLM.
-    
+
     **Request Body:**
     - `message`: The user's input message
     - `conversation_id`: Optional ID for continuing a conversation
     - `stream`: Whether to stream the response (default: true)
     - `extra_options`: Optional features object, e.g., `{"web_search": true}`
     - `images`: Optional list of images for multimodal understanding
-    
+
     **Response (SSE stream when stream=true):**
     ```
     data: {"type": "vision", "data": {"is_food_related": true, "intent": "...", "description": "..."}}
@@ -77,6 +121,49 @@ async def conversation(request: ConversationRequest, http_request: Request):
     data: {"type": "done", "conversation_id": "..."}
     ```
     """
+    # ==========================================================================
+    # Security Layer 1: Basic Pattern-based Check (Fast, No LLM)
+    # ==========================================================================
+    scan_result = prompt_guard.scan(request.message)
+    if scan_result.threat_level == ThreatLevel.BLOCKED:
+        # Log security event
+        audit_logger.prompt_injection_blocked(
+            user_id=getattr(http_request.state, "user_id", None),
+            request=http_request,
+            patterns=scan_result.matched_patterns,
+            input_preview=request.message[:100],
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=scan_result.reason or "检测到潜在的恶意输入，请修改您的问题",
+        )
+
+    # ==========================================================================
+    # Security Layer 2: NeMo Guardrails Deep Check (LLM-based, if enabled)
+    # ==========================================================================
+    try:
+        guard_result = await nemo_guard.check_input(request.message)
+        if guard_result.should_block:
+            # Log security event
+            audit_logger.prompt_injection_blocked(
+                user_id=getattr(http_request.state, "user_id", None),
+                request=http_request,
+                patterns=["guardrails:" + (guard_result.details or {}).get("threat_type", "unknown")],
+                input_preview=request.message[:100],
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=guard_result.reason or "检测到潜在的恶意输入，请修改您的问题",
+            )
+        elif guard_result.result == GuardResult.WARNING:
+            # Log warning but allow through
+            logger.warning(f"Guardrails warning: {guard_result.reason}")
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        # Don't block on guardrails errors, just log
+        logger.error(f"Guardrails check error (non-blocking): {e}")
+
     logger.info(f"Received conversation request: '{request.message[:50]}...', images={len(request.images) if request.images else 0}")
     
     # Convert images to service format
