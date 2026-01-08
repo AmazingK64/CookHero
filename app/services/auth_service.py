@@ -2,16 +2,18 @@
 Authentication service for CookHero.
 
 Provides user registration, password hashing, and JWT token generation.
+Includes security features: account lockout after failed attempts.
 """
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 
 import bcrypt
 from jose import jwt
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from redis.asyncio import Redis
 
 from app.config import settings
 from app.database.models import UserModel
@@ -21,12 +23,90 @@ logger = logging.getLogger(__name__)
 
 
 class AuthService:
-    """Service for user authentication and registration."""
+    """Service for user authentication and registration with security features."""
 
     def __init__(self, secret_key: str | None = None):
         self.secret_key = secret_key or settings.JWT_SECRET_KEY
         self.algorithm = settings.JWT_ALGORITHM
         self.expire_minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        self.max_failed_attempts = settings.LOGIN_MAX_FAILED_ATTEMPTS
+        self.lockout_minutes = settings.LOGIN_LOCKOUT_MINUTES
+        self._redis: Optional[Redis] = None
+
+    def set_redis(self, redis_client: Redis) -> None:
+        """Set Redis client for login attempt tracking."""
+        self._redis = redis_client
+
+    # ------------------------------------------------------------------
+    # Login attempt tracking (account lockout protection)
+    # ------------------------------------------------------------------
+    async def _get_failed_attempts_key(self, username: str) -> str:
+        """Generate Redis key for tracking failed login attempts."""
+        return f"auth:failed_attempts:{username}"
+
+    async def _get_lockout_key(self, username: str) -> str:
+        """Generate Redis key for account lockout."""
+        return f"auth:lockout:{username}"
+
+    async def is_account_locked(self, username: str) -> Tuple[bool, int]:
+        """
+        Check if account is locked due to too many failed attempts.
+
+        Returns:
+            Tuple of (is_locked, remaining_seconds)
+        """
+        if not self._redis:
+            return False, 0
+
+        lockout_key = await self._get_lockout_key(username)
+        ttl = await self._redis.ttl(lockout_key)
+
+        if ttl > 0:
+            return True, ttl
+
+        return False, 0
+
+    async def record_failed_attempt(self, username: str) -> Tuple[int, bool]:
+        """
+        Record a failed login attempt.
+
+        Returns:
+            Tuple of (current_attempts, is_now_locked)
+        """
+        if not self._redis:
+            return 0, False
+
+        failed_key = await self._get_failed_attempts_key(username)
+        lockout_key = await self._get_lockout_key(username)
+
+        # Increment failed attempts
+        attempts = await self._redis.incr(failed_key)
+
+        # Set expiry on the counter (reset after lockout period)
+        await self._redis.expire(failed_key, self.lockout_minutes * 60)
+
+        # Check if we need to lock the account
+        if attempts >= self.max_failed_attempts:
+            # Lock the account
+            await self._redis.setex(
+                lockout_key,
+                self.lockout_minutes * 60,
+                "locked"
+            )
+            logger.warning(f"Account locked: {username} after {attempts} failed attempts")
+            return attempts, True
+
+        return attempts, False
+
+    async def clear_failed_attempts(self, username: str) -> None:
+        """Clear failed login attempts after successful login."""
+        if not self._redis:
+            return
+
+        failed_key = await self._get_failed_attempts_key(username)
+        lockout_key = await self._get_lockout_key(username)
+
+        await self._redis.delete(failed_key, lockout_key)
 
     # ------------------------------------------------------------------
     # User retrieval helpers
