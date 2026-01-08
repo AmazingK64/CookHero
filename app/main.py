@@ -11,30 +11,49 @@ from app.database.session import init_db, close_db
 from app.database.document_repository import DocumentRepository
 from app.services.auth_service import auth_service
 from app.services.rag_service import rag_service_instance
+from app.middleware.rate_limiter import rate_limiter
+from app.security.sanitizer import setup_secure_logging
+from app.security.audit import audit_logger, AuditEventType
 import logging
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Setup secure logging with sensitive data filtering
+setup_secure_logging()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup/shutdown events."""
     # Startup
+
+    # Security check: Validate JWT secret key
+    if not settings.JWT_SECRET_KEY:
+        logger.error("SECURITY ERROR: JWT_SECRET_KEY environment variable is not set!")
+        logger.error("Please set JWT_SECRET_KEY in your .env file or environment variables.")
+        raise RuntimeError("JWT_SECRET_KEY must be configured for security")
+
     logger.info("Initializing database...")
     await init_db()
     logger.info("Database initialized.")
-    
+
     # Initialize metadata cache (load all global + user metadata at startup)
     logger.info("Initializing metadata cache...")
     await DocumentRepository.init_all_metadata_cache()
     logger.info("Metadata cache initialized.")
 
-    # Clear Redis cache on startup
+    # Clear Redis cache on startup and initialize rate limiter
     logger.info("Clearing Redis cache...")
     if rag_service_instance.cache_manager and rag_service_instance.cache_manager.redis_client:
-        await rag_service_instance.cache_manager.redis_client.flushdb()  
+        await rag_service_instance.cache_manager.redis_client.flushdb()
+        # Initialize rate limiter with Redis client
+        rate_limiter.set_redis(rag_service_instance.cache_manager.redis_client)
+        logger.info("Rate limiter initialized with Redis.")
+        # Initialize auth service with Redis client for login tracking
+        auth_service.set_redis(rag_service_instance.cache_manager.redis_client)
+        logger.info("Auth service initialized with Redis for login tracking.")
     logger.info("Redis cache cleared.")
     
     yield
@@ -65,6 +84,43 @@ EXEMPT_PATHS = {
     f"{settings.API_V1_STR}/auth/login",
     f"{settings.API_V1_STR}/auth/register",
 }
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+
+    # Add rate limit headers if available
+    if hasattr(request.state, "rate_limit_remaining"):
+        response.headers["X-RateLimit-Remaining"] = str(request.state.rate_limit_remaining)
+        response.headers["X-RateLimit-Limit"] = str(request.state.rate_limit_limit)
+
+    return response
+
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Rate limiting middleware using Redis."""
+    # Check rate limit
+    rate_limit_response = await rate_limiter.check_rate_limit(request)
+    if rate_limit_response:
+        # Log rate limit exceeded
+        audit_logger.rate_limit_exceeded(
+            request=request,
+            user_id=getattr(request.state, "user_id", None),
+            endpoint=str(request.url.path),
+        )
+        return rate_limit_response
+
+    return await call_next(request)
 
 
 @app.middleware("http")
