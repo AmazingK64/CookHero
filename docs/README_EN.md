@@ -7,16 +7,19 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.122-009688.svg)](https://fastapi.tiangolo.com/)
 [![LangChain](https://img.shields.io/badge/LangChain-1.1-green.svg)](https://www.langchain.com/)
 [![Milvus](https://img.shields.io/badge/Milvus-2.6-orange.svg)](https://milvus.io/)
+[![NeMo Guardrails](https://img.shields.io/badge/NeMo%20Guardrails-0.12-76B900.svg)](https://github.com/NVIDIA/NeMo-Guardrails)
+[![RAGAS](https://img.shields.io/badge/RAGAS-0.2-purple.svg)](https://docs.ragas.io/)
 [![License](https://img.shields.io/badge/License-APACHE%202.0-blue.svg)](LICENSE)
 
 [简体中文](README.md) | English
 
 <div align="center">
 <p align="center">
-  <img src="./docs/example.gif" width="48%">
-  <img src="./docs/show.jpg" width="48%">
+  <img src="./example.gif" width="48%">
+  <img src="./show.jpg" width="48%">
 </p>
 </div>
+
 
 ---
 
@@ -78,6 +81,16 @@ CookHero targets kitchen beginners, fitness enthusiasts, health-conscious users,
 - **Async Evaluation**: Background asynchronous execution without affecting response speed
 - **Trend Analysis**: Support for evaluation trend viewing and quality alerts
 - **Data Persistence**: Evaluation results stored in PostgreSQL
+
+### 9. Security Protection System 🆕
+- **Multi-layer Defense**: Input validation → Pattern detection → LLM deep detection
+- **Prompt Injection Protection**: Dual detection mechanism based on rules and AI
+- **Rate Limiting**: Redis sliding window algorithm with endpoint-specific limits
+- **Account Security**: Login failure lockout, JWT expiration policy, security headers
+- **Sensitive Data Protection**: Log sanitization, API key filtering
+- **Security Audit**: Structured JSON audit logs, SIEM system integration support
+
+> 📖 For detailed security architecture, see [Security Documentation](SECURITY.md)
 
 ---
 
@@ -207,6 +220,21 @@ Contains:
 
 See comments in [config.yml](config.yml) for detailed explanations.
 
+### 3. Security Configuration
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `JWT_SECRET_KEY` | **Required** | JWT signing key, must be set in production |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Access token expiration time (minutes) |
+| `RATE_LIMIT_ENABLED` | `true` | Enable rate limiting |
+| `RATE_LIMIT_LOGIN_PER_MINUTE` | `5` | Login endpoint rate limit per minute |
+| `RATE_LIMIT_CONVERSATION_PER_MINUTE` | `30` | Conversation endpoint rate limit per minute |
+| `LOGIN_MAX_FAILED_ATTEMPTS` | `5` | Failed login attempts before lockout |
+| `LOGIN_LOCKOUT_MINUTES` | `15` | Account lockout duration (minutes) |
+| `PROMPT_GUARD_ENABLED` | `true` | Enable prompt injection protection |
+| `MAX_MESSAGE_LENGTH` | `10000` | Maximum message length (characters) |
+| `MAX_IMAGE_SIZE_MB` | `5` | Maximum image size (MB) |
+
 ---
 
 ## 🛠️ Development Guide
@@ -233,7 +261,7 @@ npm run lint    # Code linting
 
 - [x] **Multimodal Support**: Ingredient image recognition, dish identification ✅
 - [x] **RAG Evaluation System**: Quality monitoring based on RAGAS ✅
-- [ ] **Dish Image Generation**: AI-generated dish effect images
+- [x] **Security Protection System**: Input validation, prompt injection protection, rate limiting ✅
 - [ ] **Voice Interaction**: Voice input queries, voice step narration
 - [ ] **Nutrition Analysis**: Automatic calculation of calories and nutrients
 - [ ] **Community Features**: User sharing, ratings, comments
@@ -266,6 +294,7 @@ This project is licensed under the [APACHE LICENSE 2.0](LICENSE). See the LICENS
 - [LangChain](https://www.langchain.com/) - Powerful LLM application framework
 - [Milvus](https://milvus.io/) - High-performance vector database
 - [FastAPI](https://fastapi.tiangolo.com/) - Modern Python web framework
+- [NVIDIA NeMo Guardrails](https://developer.nvidia.com/nvidia-nemo) - Advanced security protection framework
 
 ---
 

@@ -249,13 +249,53 @@ utils/
 
 **职责**：
 - FastAPI 应用初始化
-- 中间件配置（CORS、异常处理）
+- 中间件配置（CORS、异常处理、安全头、速率限制）
 - 路由注册
 - 生命周期管理（数据库初始化、缓存清理）
 
 ---
 
-### 2.12 视觉模块 (`app/vision/`) 🆕
+### 2.12 安全模块 (`app/security/`) 🆕
+
+```
+security/
+├── __init__.py           # 模块导出
+├── prompt_guard.py       # 基于正则的提示词注入检测
+├── sanitizer.py          # 敏感数据过滤和日志脱敏
+├── audit.py              # 安全审计日志
+└── guardrails/           # NeMo Guardrails 集成
+    ├── __init__.py
+    ├── guard.py          # Guardrails 封装类
+    └── config/           # Guardrails 配置
+        ├── config.yml    # 模型配置
+        ├── prompts.yml   # 提示词模板
+        └── rails/        # 安全规则定义
+```
+
+**职责**：
+- **prompt_guard.py**：基于正则表达式的快速模式检测，识别常见提示词注入攻击
+- **sanitizer.py**：日志敏感数据过滤，防止 API Key、密码等泄露到日志
+- **audit.py**：结构化安全审计日志，支持 SIEM 系统对接
+- **guardrails/**：NeMo Guardrails 集成，提供 LLM 驱动的深度安全检测
+
+---
+
+### 2.13 中间件模块 (`app/middleware/`) 🆕
+
+```
+middleware/
+├── __init__.py           # 模块初始化
+└── rate_limiter.py       # Redis 速率限制器
+```
+
+**职责**：
+- 基于 Redis 的滑动窗口速率限制
+- 按端点类型区分限制（登录、对话、全局）
+- IP 级别和用户级别限流支持
+
+---
+
+### 2.14 视觉模块 (`app/vision/`)
 
 ```
 vision/
@@ -345,13 +385,15 @@ tests/
 ├── test_llm_api.py       # LLM API 调用测试
 ├── test_deep_agent.py    # Agent 功能测试
 ├── test_user_personalization.py # 用户个性化测试
-└── test_vision.py        # 视觉模块测试
+├── test_vision.py        # 视觉模块测试
+└── test_guardrails.py    # 安全防护测试 🆕
 ```
 
 **职责**：
 - 单元测试
 - 集成测试
 - 端到端测试
+- 安全模块测试
 
 ---
 
@@ -396,6 +438,9 @@ deployments/
 
 ```
 docs/
+├── PROJECT_STRUCTURE.md  # 项目结构文档（本文档）
+├── README_EN.md          # 英文说明文档
+├── SECURITY.md           # 安全策略文档 🆕
 ├── LOGO_DESIGN.md        # Logo 设计方案
 ├── ARCHITECTURE.md       # 架构设计文档（待添加）
 └── API.md                # API 文档（待添加）
@@ -454,6 +499,17 @@ Python 依赖列表，包含所有后端依赖的精确版本号。
 3. **指标计算**：使用 RAGAS 计算 Faithfulness 和 Answer Relevancy
 4. **结果存储**：`evaluation_repository.py` 保存到 PostgreSQL
 5. **告警检查**：指标低于阈值时触发告警
+
+### 安全检查流程 🆕
+
+1. **请求接收**：FastAPI 接收用户请求
+2. **速率限制检查**：`rate_limiter.py` 检查 IP/用户请求频率
+3. **输入验证**：Pydantic 模型验证消息长度、图片大小等
+4. **基础模式检测**：`prompt_guard.py` 正则匹配危险模式
+5. **深度安全检测**：`guardrails/guard.py` LLM 驱动的语义分析
+6. **业务处理**：通过安全检查后进入正常业务流程
+7. **审计记录**：`audit.py` 记录安全事件到结构化日志
+8. **敏感数据过滤**：`sanitizer.py` 过滤日志中的敏感信息
 
 ---
 
