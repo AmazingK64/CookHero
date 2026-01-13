@@ -2,7 +2,7 @@
  * Base API client with common utilities
  */
 
-import { API_BASE } from '../../constants';
+import { API_BASE, STORAGE_KEYS } from '../../constants';
 import { capitalize } from '../../utils';
 
 /**
@@ -23,10 +23,29 @@ export function createJsonHeaders(token?: string): HeadersInit {
 }
 
 /**
+ * Custom error for 401 Unauthorized responses
+ */
+export class UnauthorizedError extends Error {
+  constructor(message: string = 'Unauthorized') {
+    super(message);
+    this.name = 'UnauthorizedError';
+  }
+}
+
+/**
  * Parse typical FastAPI error responses (Pydantic validation errors or HTTPException)
  * and return a friendly message string.
  */
 export async function parseErrorResponse(response: Response): Promise<string> {
+  // Handle 401 Unauthorized - clear auth data
+  if (response.status === 401) {
+    localStorage.removeItem(STORAGE_KEYS.TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.USERNAME);
+    // Dispatch custom event to notify auth context
+    window.dispatchEvent(new Event('auth-unauthorized'));
+    throw new UnauthorizedError();
+  }
+
   const contentType = response.headers.get('content-type') || '';
   
   try {

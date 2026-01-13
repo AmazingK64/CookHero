@@ -202,10 +202,27 @@ interface PeriodSelectorProps {
 }
 
 function PeriodSelector({ days, granularity, onDaysChange, onGranularityChange }: PeriodSelectorProps) {
+  const periodOptions = granularity === 'hour' ? [1, 3, 7] : [7, 14, 30];
+
+  const formatLabel = (d: number) => {
+    if (granularity === 'hour') {
+      return `${d * 24}小时`;
+    }
+    return `${d}天`;
+  };
+
+  const handleGranularityChange = (g: 'day' | 'hour') => {
+    onGranularityChange(g);
+    const nextOptions = g === 'hour' ? [1, 3, 7] : [7, 14, 30];
+    if (!nextOptions.includes(days)) {
+      onDaysChange(nextOptions[0]);
+    }
+  };
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-        {[7, 14, 30].map((d) => (
+        {periodOptions.map((d) => (
           <button
             key={d}
             onClick={() => onDaysChange(d)}
@@ -215,7 +232,7 @@ function PeriodSelector({ days, granularity, onDaysChange, onGranularityChange }
                 : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
           >
-            {d}天
+            {formatLabel(d)}
           </button>
         ))}
       </div>
@@ -223,7 +240,7 @@ function PeriodSelector({ days, granularity, onDaysChange, onGranularityChange }
         {(['day', 'hour'] as const).map((g) => (
           <button
             key={g}
-            onClick={() => onGranularityChange(g)}
+            onClick={() => handleGranularityChange(g)}
             className={`px-3 py-1.5 text-xs font-medium transition-colors ${
               granularity === g
                 ? 'bg-orange-500 text-white'
