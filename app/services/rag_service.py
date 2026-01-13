@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RetrievalResult:
     """Result of RAG retrieval operation."""
+
     original_query: str
     rewritten_query: str
     context: str
@@ -45,9 +46,8 @@ class RAGService:
     """
     Orchestrates the entire RAG pipeline.
 
-    Provides two main interfaces:
-    1. retrieve() - Query rewriting and retrieval, returns context
-    2. ask_with_generation() - Full RAG + LLM generation pipeline
+    Provides the main interface:
+    - retrieve() - Query rewriting and retrieval, returns context
     """
 
     _instance = None

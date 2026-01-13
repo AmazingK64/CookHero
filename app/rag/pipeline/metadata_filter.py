@@ -4,6 +4,7 @@ LLM-driven metadata expression generator.
 Combines the user query, available metadata values, and Milvus reference docs
 to produce a ready-to-use boolean expression string for the vector store `expr` field.
 """
+
 import json
 import logging
 import re
@@ -15,15 +16,14 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 from app.config import settings, LLMType
-from app.llm import ChatOpenAIProvider
-from app.llm.context import llm_context
+from app.llm import ChatOpenAIProvider, llm_context
 from app.utils.structured_json import extract_first_valid_json
 
 logger = logging.getLogger(__name__)
 
 
 FILTER_EXPRESSION_PROMPT = ChatPromptTemplate.from_template(
-"""
+    """
 你是 CookHero 的「Milvus 元数据过滤表达式生成器」。
 
 你的任务是：**根据用户查询，判断是否可以生成一个可直接用于 Milvus `expr` 参数的布尔过滤表达式**。
@@ -186,11 +186,10 @@ class MetadataFilterExtractor:
         if match:
             text = match.group(1).strip()
 
-        if text.startswith("\"") and text.endswith("\"") and len(text) >= 2:
+        if text.startswith('"') and text.endswith('"') and len(text) >= 2:
             text = text[1:-1].strip()
 
         if text.upper() == "NONE" or not text:
             return None
 
         return text
-

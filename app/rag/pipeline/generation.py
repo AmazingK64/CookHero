@@ -2,16 +2,12 @@
 """LLM integration for query rewriting and response generation."""
 
 import logging
-from typing import List, Optional
+from typing import Optional
 
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.config import settings, LLMType
-from app.llm import ChatOpenAIProvider
-from app.llm.provider import DynamicChatInvoker
-from app.llm.context import llm_context
+from app.llm import ChatOpenAIProvider, llm_context
 
 
 logger = logging.getLogger(__name__)
@@ -63,6 +59,7 @@ REWRITE_PROMPT_TEMPLATE = """
 只输出1句重写后的查询，禁止添加前缀/后缀/解释/Markdown/项目符号/标题，禁止多行，仅返回重写后的自然语言查询:
 """
 REWRITE_PROMPT = ChatPromptTemplate.from_template(REWRITE_PROMPT_TEMPLATE)
+
 
 class GenerationIntegrationModule:
     """
