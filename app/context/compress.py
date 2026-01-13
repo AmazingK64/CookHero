@@ -21,7 +21,8 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import settings, LLMType
-from app.llm import ChatOpenAIProvider, DynamicChatInvoker
+from app.llm import ChatOpenAIProvider
+from app.llm.context import llm_context
 
 from app.conversation.repository import ConversationRepository
 
@@ -71,13 +72,15 @@ COMPRESSION_SYSTEM_PROMPT = """
 class ContextCompressor:
     """
     Compresses conversation history into summaries using LLM.
-    
+
     Compression strategy:
     - Triggered when: uncompressed_count >= compression_threshold + recent_messages_limit
     - Compresses: first compression_threshold messages from uncompressed ones
     - Result: uncompressed_count reduced by compression_threshold
     - Invariant: every message is either compressed (in summary) or in context (original)
     """
+
+    MODULE_NAME = "context_compression"
 
     def __init__(
         self,
@@ -90,7 +93,7 @@ class ContextCompressor:
     ):
         """
         Initialize ContextCompressor.
-        
+
         Args:
             llm_type: Which LLM tier to use (fast/normal)
             compression_threshold: Number of messages to compress each time
@@ -104,28 +107,30 @@ class ContextCompressor:
         self.history_text_max_len = history_text_max_len
 
         self._provider = provider or ChatOpenAIProvider(settings.llm)
-        base_llm = self._provider.create_base_llm(llm_type, temperature=0.3)
-        self._llm = DynamicChatInvoker(self._provider, llm_type, base_llm)
+        # Use tracked invoker for usage statistics
+        self._llm = self._provider.create_tracked_invoker(llm_type, temperature=0.3)
 
     async def maybe_compress(
         self,
         conversation_id: str,
         repository: ConversationRepository,
+        user_id: Optional[str] = None,
     ) -> bool:
         """
         Check if compression is needed and perform it if so.
-        
+
         This is the main entry point for compression logic.
         Handles: decision making, compression, and persistence.
-        
+
         Compression rule:
         - When uncompressed_count >= compression_threshold + recent_messages_limit:
           - Compress first compression_threshold messages from uncompressed ones
-        
+
         Args:
             conversation_id: The conversation ID
             repository: ConversationRepository for data access and persistence
-            
+            user_id: User ID for tracking (optional)
+
         Returns:
             True if compression was performed, False otherwise
         """
@@ -173,6 +178,8 @@ class ContextCompressor:
             new_summary = await self._compress(
                 messages_to_compress,
                 existing_summary=existing_summary,
+                user_id=user_id,
+                conversation_id=conversation_id,
             )
             
             if new_summary:
@@ -209,17 +216,21 @@ class ContextCompressor:
         self,
         messages: List[Dict[str, str]],
         existing_summary: Optional[str] = None,
+        user_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
     ) -> str:
         """
         Compress messages into a summary (internal method).
-        
+
         If existing_summary is provided, performs incremental compression
         by integrating new messages with the existing summary.
-        
+
         Args:
             messages: List of message dicts to compress
             existing_summary: Optional existing summary to build upon
-            
+            user_id: User ID for tracking (optional)
+            conversation_id: Conversation ID for tracking (optional)
+
         Returns:
             Compressed summary string
         """
@@ -246,10 +257,12 @@ class ContextCompressor:
             )
         
         try:
-            response = await self._llm.ainvoke([
-                SystemMessage(content=COMPRESSION_SYSTEM_PROMPT),
-                HumanMessage(content=user_prompt),
-            ])
+            # Use llm_context for usage tracking
+            with llm_context(self.MODULE_NAME, user_id, conversation_id):
+                response = await self._llm.ainvoke([
+                    SystemMessage(content=COMPRESSION_SYSTEM_PROMPT),
+                    HumanMessage(content=user_prompt),
+                ])
             
             # Extract content from response
             content = response.content

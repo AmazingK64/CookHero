@@ -8,7 +8,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 from urllib import response
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -16,7 +16,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 from app.config import settings, LLMType
 from app.llm import ChatOpenAIProvider
-from app.llm.provider import DynamicChatInvoker
+from app.llm.context import llm_context
 from app.utils.structured_json import extract_first_valid_json
 
 logger = logging.getLogger(__name__)
@@ -104,6 +104,10 @@ REFERENCE_FILES = ("operators.md",)
 
 
 class MetadataFilterExtractor:
+    """LLM-driven metadata expression generator for Milvus filtering."""
+
+    MODULE_NAME = "rag_metadata_filter"
+
     def __init__(
         self,
         llm_type: LLMType | str = LLMType.FAST,
@@ -111,15 +115,21 @@ class MetadataFilterExtractor:
     ):
         self._llm_type = llm_type
         self._provider = provider or ChatOpenAIProvider(settings.llm)
-        _base_llm = self._provider.create_base_llm(llm_type, temperature=0.0)
-        self._llm = DynamicChatInvoker(self._provider, llm_type, _base_llm)
+        # Use tracked invoker for usage statistics
+        self._llm = self._provider.create_tracked_invoker(llm_type, temperature=0.0)
 
         self.reference_material = self._load_reference_material()
 
-    async def build_filter_expression(self, query: str, metadata_catalog: Dict[str, Dict[str, List[str]]]) -> str | None:
+    async def build_filter_expression(
+        self,
+        query: str,
+        metadata_catalog: Dict[str, Dict[str, List[str]]],
+        user_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+    ) -> str | None:
         if not metadata_catalog:
             return None
-        
+
         debugc = ""
 
         metadata_schema = self._summarize_metadata(metadata_catalog)
@@ -129,7 +139,9 @@ class MetadataFilterExtractor:
                 reference_material=self.reference_material,
                 metadata_schema=metadata_schema,
             )
-            response = await self._llm.ainvoke(template.messages)
+            # Use llm_context for usage tracking
+            with llm_context(self.MODULE_NAME, user_id, conversation_id):
+                response = await self._llm.ainvoke(template.messages)
             content = response.content.strip()
             debugc = content
 

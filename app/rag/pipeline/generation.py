@@ -2,7 +2,7 @@
 """LLM integration for query rewriting and response generation."""
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
@@ -11,6 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from app.config import settings, LLMType
 from app.llm import ChatOpenAIProvider
 from app.llm.provider import DynamicChatInvoker
+from app.llm.context import llm_context
 
 
 logger = logging.getLogger(__name__)
@@ -65,9 +66,11 @@ REWRITE_PROMPT = ChatPromptTemplate.from_template(REWRITE_PROMPT_TEMPLATE)
 
 class GenerationIntegrationModule:
     """
-    Integrates with a Large Language Model (LLM) for rewriting and 
+    Integrates with a Large Language Model (LLM) for rewriting and
     response generation tasks.
     """
+
+    MODULE_NAME = "rag_answer_gen"
 
     def __init__(
         self,
@@ -79,22 +82,29 @@ class GenerationIntegrationModule:
         """
         self._llm_type = llm_type
         self._provider = provider or ChatOpenAIProvider(settings.llm)
-        _base_llm = self._provider.create_base_llm(llm_type, temperature=0.0)
-        self._llm = DynamicChatInvoker(self._provider, llm_type, _base_llm)
+        # Use tracked invoker for usage statistics
+        self._llm = self._provider.create_tracked_invoker(llm_type, temperature=0.0)
 
-    async def rewrite_query(self, query: str) -> str:
+    async def rewrite_query(
+        self,
+        query: str,
+        user_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+    ) -> str:
         """
         Uses the LLM to rewrite a vague query into a more specific one for better retrieval.
         """
         template = REWRITE_PROMPT.format_prompt(query=query)
-        response = await self._llm.ainvoke(template.messages)
+        # Use llm_context for usage tracking
+        with llm_context(self.MODULE_NAME, user_id, conversation_id):
+            response = await self._llm.ainvoke(template.messages)
         rewritten_query = response.content.strip()
-        
+
         if rewritten_query != query:
             logger.info(f"Query rewritten: '{query}' -> '{rewritten_query}'")
             # fuse the rewritten query back to original if needed
             # rewritten_query = f"Origin User Query: {query}\nAI Rewritten Query: {rewritten_query}"
         else:
             logger.info(f"Query did not require rewriting: '{query}'")
-        
+
         return rewritten_query

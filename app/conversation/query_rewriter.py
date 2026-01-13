@@ -1,5 +1,6 @@
 import logging, json
 import re
+from typing import Optional
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -8,6 +9,7 @@ from regex import template
 from app.config import settings, LLMType
 from app.llm import ChatOpenAIProvider
 from app.llm.provider import DynamicChatInvoker
+from app.llm.context import llm_context
 from app.utils.structured_json import extract_first_valid_json
 
 logger = logging.getLogger(__name__)
@@ -60,6 +62,8 @@ HISTORY_REWRITE_PROMPT = ChatPromptTemplate.from_template(HISTORY_REWRITE_PROMPT
 class QueryRewriter:
     """History-aware query rewriting for conversation-driven retrieval."""
 
+    MODULE_NAME = "query_rewriter"
+
     def __init__(
         self,
         llm_type: LLMType | str = LLMType.FAST,
@@ -67,11 +71,15 @@ class QueryRewriter:
     ):
         self._llm_type = llm_type
         self._provider = provider or ChatOpenAIProvider(settings.llm)
-        _base_llm = self._provider.create_base_llm(llm_type, temperature=0.0)
-        self._llm = DynamicChatInvoker(self._provider, llm_type, _base_llm)
+        # Use tracked invoker for usage statistics
+        self._llm = self._provider.create_tracked_invoker(llm_type, temperature=0.0)
 
     async def rewrite(
-        self, current_query: str, history_text: str
+        self,
+        current_query: str,
+        history_text: str,
+        user_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
     ) -> str:
         if not history_text.strip():
             return current_query
@@ -82,7 +90,9 @@ class QueryRewriter:
             template = HISTORY_REWRITE_PROMPT.format_prompt(
                 history=history_text,
             )
-            response = await self._llm.ainvoke(template.messages)
+            # Use llm_context for usage tracking
+            with llm_context(self.MODULE_NAME, user_id, conversation_id):
+                response = await self._llm.ainvoke(template.messages)
             content = response.content.strip()
             debugc = content
 

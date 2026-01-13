@@ -11,6 +11,7 @@ from langchain_core.output_parsers import StrOutputParser
 from app.config import settings, LLMType
 from app.llm import ChatOpenAIProvider
 from app.llm.provider import DynamicChatInvoker
+from app.llm.context import llm_context
 from app.utils.structured_json import extract_first_valid_json
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,8 @@ class IntentDetector:
     Detects user intent to determine if RAG retrieval is needed.
     """
 
+    MODULE_NAME = "intent_detector"
+
     def __init__(
         self,
         llm_type: LLMType | str = LLMType.FAST,
@@ -120,18 +123,21 @@ class IntentDetector:
         """Initialize the intent detector with global or overridden LLM config."""
         self._llm_type = llm_type
         self._provider = provider or ChatOpenAIProvider(settings.llm)
-        _base_llm = self._provider.create_base_llm(llm_type, temperature=0.0)
-        self._llm = DynamicChatInvoker(self._provider, llm_type, _base_llm)
+        # Use tracked invoker for usage statistics
+        self._llm = self._provider.create_tracked_invoker(llm_type, temperature=0.0)
 
     async def detect(
         self,
         history_text: Optional[str] = None,
+        user_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
     ) -> IntentDetectionResult:
         """Detect if the query needs RAG retrieval with history awareness.
 
         Args:
-            query: Latest user query.
             history_text: Pre-formatted history text (already concatenated by ContextManager).
+            user_id: User ID for tracking (optional).
+            conversation_id: Conversation ID for tracking (optional).
         """
         history_str = history_text
         debugc = ""
@@ -140,7 +146,9 @@ class IntentDetector:
             template = INTENT_DETECTION_PROMPT.format_prompt(
                 history=history_str,
             )
-            response = await self._llm.ainvoke(template.messages)
+            # Use llm_context for usage tracking
+            with llm_context(self.MODULE_NAME, user_id, conversation_id):
+                response = await self._llm.ainvoke(template.messages)
             content = response.content.strip()
             debugc = content
 
