@@ -6,9 +6,10 @@ Provides session factory and dependency injection for FastAPI.
 
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -36,6 +37,68 @@ async_session_factory = async_sessionmaker(
     expire_on_commit=False,
     autoflush=False,
 )
+
+
+# ==================== Background Thread Database Support ====================
+# Separate engine and session factory for use in background threads
+# (e.g., LLM usage logging callbacks that run in a different event loop)
+
+_background_engine: Optional[AsyncEngine] = None
+_background_session_factory: Optional[async_sessionmaker[AsyncSession]] = None
+
+
+def get_background_session_factory() -> async_sessionmaker[AsyncSession]:
+    """
+    Get or create a session factory for use in background threads.
+
+    This creates a separate database engine that can be used from
+    a different event loop than the main FastAPI application.
+    """
+    global _background_engine, _background_session_factory
+
+    if _background_session_factory is None:
+        _background_engine = create_async_engine(
+            settings.database.postgres.async_url,
+            pool_size=2,  # Smaller pool for background operations
+            max_overflow=2,
+            pool_timeout=30,
+            pool_recycle=settings.database.postgres.pool_recycle,
+            echo=False,
+        )
+        _background_session_factory = async_sessionmaker(
+            bind=_background_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+        )
+
+    return _background_session_factory
+
+
+@asynccontextmanager
+async def get_background_session_context() -> AsyncGenerator[AsyncSession, None]:
+    """Context manager for background thread session handling."""
+    factory = get_background_session_factory()
+    async with factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+async def close_background_db() -> None:
+    """Close background database connections."""
+    global _background_engine, _background_session_factory
+    if _background_engine is not None:
+        await _background_engine.dispose()
+        _background_engine = None
+        _background_session_factory = None
+        logger.info("Background database connections closed.")
+
+
+# ==================== Main Database Functions ====================
 
 
 async def init_db() -> None:

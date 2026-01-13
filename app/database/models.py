@@ -326,3 +326,70 @@ class RAGEvaluationModel(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "evaluated_at": self.evaluated_at.isoformat() if self.evaluated_at else None,
         }
+
+
+# ==================== LLM Usage Log Model ====================
+
+class LLMUsageLogModel(Base):
+    """
+    ORM model for LLM usage statistics.
+    Records token usage, timing, and context for each LLM invocation.
+    Does NOT store input/output content for privacy.
+    """
+
+    __tablename__ = "llm_usage_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # Unique request identifier for tracing
+    request_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    # Module that made the LLM call
+    module_name: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    # User context (optional)
+    user_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    # Conversation context (optional)
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
+    # Model information
+    model_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    # Token usage statistics
+    input_tokens: Mapped[Optional[int]] = mapped_column(nullable=True)
+    output_tokens: Mapped[Optional[int]] = mapped_column(nullable=True)
+    total_tokens: Mapped[Optional[int]] = mapped_column(nullable=True)
+    # Performance metrics
+    duration_ms: Mapped[Optional[int]] = mapped_column(nullable=True)
+    # Timestamp
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False, index=True
+    )
+
+    __table_args__ = (
+        # Time-series query optimization
+        Index("ix_llm_usage_created_at_desc", created_at.desc()),
+        # User + time query
+        Index("ix_llm_usage_user_created", "user_id", "created_at"),
+        # Module + time query
+        Index("ix_llm_usage_module_created", "module_name", "created_at"),
+        # Conversation query
+        Index("ix_llm_usage_conversation", "conversation_id"),
+        # Model + time query
+        Index("ix_llm_usage_model_created", "model_name", "created_at"),
+    )
+
+    def to_dict(self) -> dict:
+        """Serialize to dict for API responses."""
+        return {
+            "id": str(self.id),
+            "request_id": self.request_id,
+            "module_name": self.module_name,
+            "user_id": self.user_id,
+            "conversation_id": str(self.conversation_id) if self.conversation_id else None,
+            "model_name": self.model_name,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
+            "duration_ms": self.duration_ms,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
