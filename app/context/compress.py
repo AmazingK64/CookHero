@@ -21,10 +21,9 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import settings, LLMType
-from app.llm import ChatOpenAIProvider
-from app.llm.context import llm_context
+from app.llm import ChatOpenAIProvider, llm_context
 
-from app.conversation.repository import ConversationRepository
+from app.database.conversation_repository import ConversationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -137,13 +136,14 @@ class ContextCompressor:
         try:
             # Get current state
             total_count = await repository.get_message_count(conversation_id)
-            existing_summary, compressed_count = await repository.get_compressed_summary(
-                conversation_id
-            )
-            
+            (
+                existing_summary,
+                compressed_count,
+            ) = await repository.get_compressed_summary(conversation_id)
+
             # Calculate uncompressed count
             uncompressed_count = total_count - compressed_count
-            
+
             # Check if compression is needed
             trigger_threshold = self.compression_threshold + self.recent_messages_limit
             if uncompressed_count < trigger_threshold:
@@ -154,7 +154,7 @@ class ContextCompressor:
                     trigger_threshold,
                 )
                 return False
-            
+
             logger.info(
                 "Triggering compression for %s: total=%d, compressed=%d, uncompressed=%d",
                 conversation_id,
@@ -162,18 +162,22 @@ class ContextCompressor:
                 compressed_count,
                 uncompressed_count,
             )
-            
+
             # Get full history for compression
-            full_history = await repository.get_history(conversation_id, limit=1000) or []
-            history_dicts = [{"role": h["role"], "content": h["content"]} for h in full_history]
-            
+            full_history = (
+                await repository.get_history(conversation_id, limit=1000) or []
+            )
+            history_dicts = [
+                {"role": h["role"], "content": h["content"]} for h in full_history
+            ]
+
             # Get messages to compress (first COMPRESSION_THRESHOLD from uncompressed)
             uncompressed_messages = history_dicts[compressed_count:]
-            messages_to_compress = uncompressed_messages[:self.compression_threshold]
-            
+            messages_to_compress = uncompressed_messages[: self.compression_threshold]
+
             if not messages_to_compress:
                 return False
-            
+
             # Perform compression
             new_summary = await self._compress(
                 messages_to_compress,
@@ -181,18 +185,18 @@ class ContextCompressor:
                 user_id=user_id,
                 conversation_id=conversation_id,
             )
-            
+
             if new_summary:
                 # Update compressed count
                 new_compressed_count = compressed_count + len(messages_to_compress)
-                
+
                 # Persist
                 await repository.update_compressed_summary(
                     conversation_id,
                     new_summary,
                     new_compressed_count,
                 )
-                
+
                 logger.info(
                     "Compressed %d messages for %s, new compressed_count=%d",
                     len(messages_to_compress),
@@ -200,9 +204,9 @@ class ContextCompressor:
                     new_compressed_count,
                 )
                 return True
-            
+
             return False
-            
+
         except Exception as e:
             logger.error(
                 "Failed to compress context for %s: %s",
@@ -236,13 +240,13 @@ class ContextCompressor:
         """
         if not messages:
             return existing_summary or ""
-        
+
         # Limit messages per compression to avoid context overflow
-        messages_to_process = messages[-self.max_messages_per_compression:]
-        
+        messages_to_process = messages[-self.max_messages_per_compression :]
+
         # Format messages for compression
         messages_text = self._format_messages_for_compression(messages_to_process)
-        
+
         # Build compression prompt
         if existing_summary:
             user_prompt = (
@@ -252,18 +256,19 @@ class ContextCompressor:
             )
         else:
             user_prompt = (
-                f"【对话内容】\n{messages_text}\n\n"
-                "请为上述对话生成一个简洁的摘要。"
+                f"【对话内容】\n{messages_text}\n\n请为上述对话生成一个简洁的摘要。"
             )
-        
+
         try:
             # Use llm_context for usage tracking
             with llm_context(self.MODULE_NAME, user_id, conversation_id):
-                response = await self._llm.ainvoke([
-                    SystemMessage(content=COMPRESSION_SYSTEM_PROMPT),
-                    HumanMessage(content=user_prompt),
-                ])
-            
+                response = await self._llm.ainvoke(
+                    [
+                        SystemMessage(content=COMPRESSION_SYSTEM_PROMPT),
+                        HumanMessage(content=user_prompt),
+                    ]
+                )
+
             # Extract content from response
             content = response.content
             if isinstance(content, str):
@@ -271,14 +276,14 @@ class ContextCompressor:
             else:
                 # Handle case where content might be a list
                 summary = str(content).strip()
-            
+
             logger.info(
                 "Compressed %d messages into summary (len=%d)",
                 len(messages_to_process),
                 len(summary),
             )
             return summary
-            
+
         except Exception as e:
             logger.error("Failed to compress messages: %s", e, exc_info=True)
             # Return existing summary on failure, or empty string
@@ -295,7 +300,7 @@ class ContextCompressor:
             content = msg.get("content", "")
             # Truncate very long messages
             if len(content) > self.history_text_max_len:
-                content = content[:self.history_text_max_len] + "..."
+                content = content[: self.history_text_max_len] + "..."
             role_label = "用户" if role == "user" else "助手"
             parts.append(f"{role_label}: {content}")
         return "\n".join(parts)

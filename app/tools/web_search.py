@@ -21,9 +21,7 @@ from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
 from app.config import settings, LLMType
-from app.llm import ChatOpenAIProvider
-from app.llm.callbacks import get_usage_callbacks
-from app.llm.context import llm_context
+from app.llm import ChatOpenAIProvider, get_usage_callbacks, llm_context
 
 logger = logging.getLogger(__name__)
 
@@ -265,9 +263,9 @@ class WebSearchTool:
             )
             # Use llm_context for usage tracking
             with llm_context(self.MODULE_NAME, user_id, conversation_id):
-                response = await self._llm.with_config(callbacks=self._callbacks).ainvoke(
-                    prompt.messages
-                )
+                response = await self._llm.with_config(
+                    callbacks=self._callbacks
+                ).ainvoke(prompt.messages)
 
             # Parse tool calls
             if not response.tool_calls:

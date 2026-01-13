@@ -11,9 +11,9 @@ from app.database.session import init_db, close_db
 from app.database.document_repository import DocumentRepository
 from app.services.auth_service import auth_service
 from app.services.rag_service import rag_service_instance
-from app.middleware.rate_limiter import rate_limiter
+from app.security.middleware.rate_limiter import rate_limiter
 from app.security.sanitizer import setup_secure_logging
-from app.security.audit import audit_logger, AuditEventType
+from app.security.audit import audit_logger
 import logging
 
 logging.basicConfig(level=logging.INFO,

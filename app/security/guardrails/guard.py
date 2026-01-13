@@ -14,29 +14,31 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
-from app.llm.context import get_llm_context
+from app.llm import get_llm_context
 
 logger = logging.getLogger(__name__)
 
 
 class GuardResult(Enum):
     """安全检查结果枚举"""
-    SAFE = "safe"           # 安全，可以继续
-    BLOCKED = "blocked"     # 阻止，拒绝处理
-    WARNING = "warning"     # 警告，记录但允许
+
+    SAFE = "safe"  # 安全，可以继续
+    BLOCKED = "blocked"  # 阻止，拒绝处理
+    WARNING = "warning"  # 警告，记录但允许
 
 
 @dataclass
 class SecurityCheckResult:
     """安全检查结果"""
+
     result: GuardResult
     reason: str = ""
     details: Optional[dict] = None
-    
+
     @property
     def is_safe(self) -> bool:
         return self.result != GuardResult.BLOCKED
-    
+
     @property
     def should_block(self) -> bool:
         return self.result == GuardResult.BLOCKED
@@ -79,18 +81,18 @@ class CookHeroGuard:
         "output_leak": "抱歉，我无法提供这类信息。让我们继续聊烹饪相关的话题吧！🍳",
         "default": "抱歉，我无法处理这个请求。",
     }
-    
+
     def __init__(self, enabled: bool = True):
         """
         初始化 Guardrails
-        
+
         Args:
             enabled: 是否启用安全检查
         """
         self.enabled = enabled
         self._rails: Any = None  # Type: LLMRails when initialized
         self._initialized = False
-        
+
     async def _ensure_initialized(self) -> bool:
         """确保 Guardrails 已初始化"""
         if self._initialized:
@@ -111,6 +113,7 @@ class CookHeroGuard:
 
             # 从应用配置获取 LLM 设置
             from app.config.config import settings
+
             llm_config = settings.llm.fast  # 使用 fast LLM 进行安全检查（低延迟）
 
             # 设置环境变量供 NeMo Guardrails 使用
@@ -124,7 +127,7 @@ class CookHeroGuard:
             config = RailsConfig.from_path(str(self.CONFIG_PATH))
 
             # 动态设置模型名称为应用配置中的模型
-            if hasattr(llm_config, 'pick_default_model'):
+            if hasattr(llm_config, "pick_default_model"):
                 model_name = llm_config.pick_default_model()
                 config.models[0].model = model_name
                 logger.info(f"Guardrails model set to: {model_name}")
@@ -136,7 +139,9 @@ class CookHeroGuard:
             return True
 
         except ImportError:
-            logger.warning("nemoguardrails not installed, falling back to basic protection")
+            logger.warning(
+                "nemoguardrails not installed, falling back to basic protection"
+            )
             self._initialized = True
             return False
         except Exception as e:
@@ -168,14 +173,14 @@ class CookHeroGuard:
             )
         except Exception as e:
             logger.warning(f"Failed to log guardrails usage: {e}")
-    
+
     async def check_input(self, message: str) -> SecurityCheckResult:
         """
         检查用户输入是否安全
-        
+
         Args:
             message: 用户输入消息
-            
+
         Returns:
             SecurityCheckResult: 包含检查结果和原因
         """
@@ -183,7 +188,7 @@ class CookHeroGuard:
         basic_result = self._basic_input_check(message)
         if basic_result.should_block:
             return basic_result
-        
+
         # 2. Guardrails 深度检查
         if await self._ensure_initialized() and self._rails:
             try:
@@ -194,18 +199,18 @@ class CookHeroGuard:
                 return SecurityCheckResult(
                     result=GuardResult.WARNING,
                     reason="安全检查异常，已记录",
-                    details={"error": str(e)}
+                    details={"error": str(e)},
                 )
-        
+
         return SecurityCheckResult(result=GuardResult.SAFE)
-    
+
     async def check_output(self, response: str) -> SecurityCheckResult:
         """
         检查 AI 输出是否安全
-        
+
         Args:
             response: AI 生成的响应
-            
+
         Returns:
             SecurityCheckResult: 包含检查结果和原因
         """
@@ -213,7 +218,7 @@ class CookHeroGuard:
         basic_result = self._basic_output_check(response)
         if basic_result.should_block:
             return basic_result
-        
+
         # 2. Guardrails 深度检查
         if await self._ensure_initialized() and self._rails:
             try:
@@ -223,34 +228,40 @@ class CookHeroGuard:
                 return SecurityCheckResult(
                     result=GuardResult.WARNING,
                     reason="输出安全检查异常",
-                    details={"error": str(e)}
+                    details={"error": str(e)},
                 )
-        
+
         return SecurityCheckResult(result=GuardResult.SAFE)
-    
+
     def _basic_input_check(self, message: str) -> SecurityCheckResult:
         """基础输入检查（不依赖 LLM）"""
         import re
-        
+
         # 危险模式检测 - 与 prompt_guard.py 保持一致
         dangerous_patterns = [
             # 系统提示覆盖 - 扩展版本
-            (r"ignore\s+(all\s+)?(previous|prior|above|your|these)\s+(instructions?|prompts?|rules?)", "jailbreak"),
-            (r"忽略\s*(之前|上面|以前|先前|你的|所有|这些)\s*的?\s*(指令|提示|规则|要求)", "jailbreak"),
+            (
+                r"ignore\s+(all\s+)?(previous|prior|above|your|these)\s+(instructions?|prompts?|rules?)",
+                "jailbreak",
+            ),
+            (
+                r"忽略\s*(之前|上面|以前|先前|你的|所有|这些)\s*的?\s*(指令|提示|规则|要求)",
+                "jailbreak",
+            ),
             (r"(新的|覆盖|替换)\s*(系统)?\s*(指令|提示)", "jailbreak"),
-            
             # 不要遵守/违背/打破规则
-            (r"(don't|do\s+not)\s+(follow|obey|comply\s+with)\s+(your\s+)?(instructions?|rules?)", "jailbreak"),
+            (
+                r"(don't|do\s+not)\s+(follow|obey|comply\s+with)\s+(your\s+)?(instructions?|rules?)",
+                "jailbreak",
+            ),
             (r"不要\s*遵守\s*(你的)?\s*(指令|规则)", "jailbreak"),
             (r"违背\s*(你的)?\s*(指令|规则)", "jailbreak"),
             (r"打破\s*(你的)?\s*(限制|规则)", "jailbreak"),
-            
             # 角色扮演操控
             (r"you\s+are\s+(now|no\s+longer)", "jailbreak"),
             (r"你现在是", "jailbreak"),
             (r"从现在开始.*?你是", "jailbreak"),
             (r"pretend\s+(to\s+be|you\s+are)", "jailbreak"),
-            
             # 分隔符注入
             (r"\[system\]", "prompt_injection"),
             (r"\[assistant\]", "prompt_injection"),
@@ -258,33 +269,35 @@ class CookHeroGuard:
             (r"<\|assistant\|>", "prompt_injection"),
             (r"<\|im_start\|>", "prompt_injection"),
             (r"<<SYS>>", "prompt_injection"),
-            
             # Jailbreak 尝试
             (r"(dan|developer)\s+mode", "jailbreak"),
             (r"(开发者|开发人员)\s*模式", "jailbreak"),
             (r"bypass\s+(your\s+)?restrictions?", "jailbreak"),
             (r"绕过\s*(你的)?\s*限制", "jailbreak"),
-            
             # 忘记/清除规则
             (r"(forget|clear|erase)\s+(your\s+)?(rules?|instructions?)", "jailbreak"),
             (r"(忘记|清除|抹除)\s*(你的)?\s*(规则|指令)", "jailbreak"),
         ]
-        
+
         for pattern, threat_type in dangerous_patterns:
             if re.search(pattern, message, re.IGNORECASE):
-                logger.warning(f"Basic input check blocked: {threat_type}, pattern: {pattern[:50]}")
+                logger.warning(
+                    f"Basic input check blocked: {threat_type}, pattern: {pattern[:50]}"
+                )
                 return SecurityCheckResult(
                     result=GuardResult.BLOCKED,
-                    reason=self.BLOCKED_RESPONSES.get(threat_type, self.BLOCKED_RESPONSES["default"]),
-                    details={"threat_type": threat_type, "pattern": pattern}
+                    reason=self.BLOCKED_RESPONSES.get(
+                        threat_type, self.BLOCKED_RESPONSES["default"]
+                    ),
+                    details={"threat_type": threat_type, "pattern": pattern},
                 )
-        
+
         return SecurityCheckResult(result=GuardResult.SAFE)
-    
+
     def _basic_output_check(self, response: str) -> SecurityCheckResult:
         """基础输出检查（不依赖 LLM）"""
         import re
-        
+
         # 敏感内容模式
         sensitive_patterns = [
             # 英文模式
@@ -298,18 +311,20 @@ class CookHeroGuard:
             (r"API\s*密钥", "output_leak"),
             (r"我是\s*(GPT|Claude|Gemini|LLaMA|OpenAI|Anthropic)", "output_leak"),
         ]
-        
+
         for pattern, threat_type in sensitive_patterns:
             if re.search(pattern, response, re.IGNORECASE):
                 logger.warning(f"Basic output check blocked: {threat_type}")
                 return SecurityCheckResult(
                     result=GuardResult.BLOCKED,
-                    reason=self.BLOCKED_RESPONSES.get(threat_type, self.BLOCKED_RESPONSES["output_leak"]),
-                    details={"threat_type": threat_type}
+                    reason=self.BLOCKED_RESPONSES.get(
+                        threat_type, self.BLOCKED_RESPONSES["output_leak"]
+                    ),
+                    details={"threat_type": threat_type},
                 )
-        
+
         return SecurityCheckResult(result=GuardResult.SAFE)
-    
+
     async def _guardrails_input_check(self, message: str) -> SecurityCheckResult:
         """使用 NeMo Guardrails 进行深度输入检查"""
         start_time = time.time()
@@ -336,7 +351,7 @@ class CookHeroGuard:
                     return SecurityCheckResult(
                         result=GuardResult.BLOCKED,
                         reason=bot_message,
-                        details={"source": "guardrails"}
+                        details={"source": "guardrails"},
                     )
 
             # 如果没有被拦截，认为是安全的
@@ -349,18 +364,22 @@ class CookHeroGuard:
 
             logger.error(f"Guardrails input check error: {e}")
             # 如果是安全相关的异常，可能意味着输入被阻止
-            if "block" in str(e).lower() or "reject" in str(e).lower() or "unsafe" in str(e).lower():
+            if (
+                "block" in str(e).lower()
+                or "reject" in str(e).lower()
+                or "unsafe" in str(e).lower()
+            ):
                 return SecurityCheckResult(
                     result=GuardResult.BLOCKED,
                     reason="Input blocked by guardrails",
-                    details={"error": str(e)}
+                    details={"error": str(e)},
                 )
             return SecurityCheckResult(
                 result=GuardResult.WARNING,
                 reason="Guardrails 检查异常",
-                details={"error": str(e)}
+                details={"error": str(e)},
             )
-    
+
     async def _guardrails_output_check(self, response: str) -> SecurityCheckResult:
         """使用 NeMo Guardrails 进行输出检查"""
         start_time = time.time()
@@ -369,7 +388,7 @@ class CookHeroGuard:
             result = await self._rails.generate_async(
                 messages=[
                     {"role": "user", "content": "检查输出"},
-                    {"role": "assistant", "content": response}
+                    {"role": "assistant", "content": response},
                 ]
             )
 
@@ -384,7 +403,7 @@ class CookHeroGuard:
                     return SecurityCheckResult(
                         result=GuardResult.BLOCKED,
                         reason=self.BLOCKED_RESPONSES["output_leak"],
-                        details={"original": response[:100], "filtered": new_content}
+                        details={"original": response[:100], "filtered": new_content},
                     )
 
             return SecurityCheckResult(result=GuardResult.SAFE)
@@ -398,9 +417,9 @@ class CookHeroGuard:
             return SecurityCheckResult(
                 result=GuardResult.WARNING,
                 reason="输出检查异常",
-                details={"error": str(e)}
+                details={"error": str(e)},
             )
-    
+
     def _is_rejection_response(self, response: str) -> bool:
         """检查响应是否是拒绝响应"""
         rejection_keywords = [
@@ -412,13 +431,17 @@ class CookHeroGuard:
             "i cannot answer",
             "i'm sorry, i can't",
         ]
-        result = any(keyword.lower() in response.lower() for keyword in rejection_keywords)
+        result = any(
+            keyword.lower() in response.lower() for keyword in rejection_keywords
+        )
         logger.debug(f"Checking rejection for '{response}': {result}")
         return result
-    
+
     def get_safe_response(self, threat_type: str = "default") -> str:
         """获取安全的拒绝响应"""
-        return self.BLOCKED_RESPONSES.get(threat_type, self.BLOCKED_RESPONSES["default"])
+        return self.BLOCKED_RESPONSES.get(
+            threat_type, self.BLOCKED_RESPONSES["default"]
+        )
 
 
 # =============================================================================
@@ -436,10 +459,11 @@ guard = CookHeroGuard(enabled=_enabled)
 # 便捷函数
 # =============================================================================
 
+
 async def check_input(message: str) -> Tuple[bool, str]:
     """
     便捷函数：检查输入是否安全
-    
+
     Returns:
         Tuple[bool, str]: (is_safe, reason)
     """
@@ -450,7 +474,7 @@ async def check_input(message: str) -> Tuple[bool, str]:
 async def check_output(response: str) -> Tuple[bool, str]:
     """
     便捷函数：检查输出是否安全
-    
+
     Returns:
         Tuple[bool, str]: (is_safe, reason)
     """

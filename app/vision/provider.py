@@ -13,8 +13,7 @@ from langchain_openai import ChatOpenAI
 
 from app.config import settings
 from app.config.vision_config import VisionModelConfig
-from app.llm.callbacks import get_usage_callbacks
-from app.llm.context import llm_context
+from app.llm import create_chat_openai, get_usage_callbacks, llm_context
 
 logger = logging.getLogger(__name__)
 
@@ -98,12 +97,12 @@ class VisionProvider:
                     "Vision API key is not configured. Set VISION_API_KEY or LLM_API_KEY in .env"
                 )
 
-            self._llm = ChatOpenAI(
+            self._llm = create_chat_openai(
                 model=self._config.model_name,
-                api_key=self._config.api_key,  # type: ignore
+                api_key=self._config.api_key,
                 base_url=self._config.base_url,
                 temperature=self._config.temperature,
-                max_completion_tokens=self._config.max_tokens,
+                max_tokens=self._config.max_tokens,
                 timeout=self._config.request_timeout,
             )
         return self._llm
