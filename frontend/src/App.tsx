@@ -8,6 +8,7 @@ import { useTheme, useAuth, useConversationContext } from './contexts';
 import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
 import EvaluationPage from './pages/Evaluation';
+import LLMStatsPage from './pages/LLMStats';
 
 /**
  * Chat view component - handles both new chat and existing conversation
@@ -116,6 +117,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   // Determine current view from pathname
   const isKnowledgeView = location.pathname === '/knowledge';
   const isEvaluationView = location.pathname === '/evaluation';
+  const isLLMStatsView = location.pathname === '/llm-stats';
 
   const handleNewChat = useCallback(() => {
     clearMessages();
@@ -139,7 +141,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   }, [logout, navigate]);
 
   const toggleMainView = useCallback(() => {
-    if (isKnowledgeView || isEvaluationView) {
+    if (isKnowledgeView || isEvaluationView || isLLMStatsView) {
       // Return to chat - if there's a current conversation, go to it
       if (conversationId && !conversationId.startsWith('temp-')) {
         navigate(`/chat/${conversationId}`);
@@ -149,7 +151,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
     } else {
       navigate('/knowledge');
     }
-  }, [isKnowledgeView, isEvaluationView, conversationId, navigate]);
+  }, [isKnowledgeView, isEvaluationView, isLLMStatsView, conversationId, navigate]);
 
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
@@ -185,7 +187,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
             </div> */}
           </div>
           <div className="flex items-center gap-1.5 sm:gap-3 text-xs text-gray-600 dark:text-gray-300 overflow-hidden">
-            {!isKnowledgeView && !isEvaluationView && conversationId && (
+            {!isKnowledgeView && !isEvaluationView && !isLLMStatsView && conversationId && (
               <span className="hidden sm:inline font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded truncate" title={conversationId}>
                 ID: {conversationId}
               </span>
@@ -200,6 +202,17 @@ function MainLayout({ children }: { children: React.ReactNode }) {
             >
               <BarChart3 className="w-4 h-4" />
               <span className="hidden sm:inline">评估</span>
+            </button>
+            <button
+              onClick={() => navigate('/llm-stats')}
+              className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full border transition-colors shrink-0 ${
+                isLLMStatsView
+                  ? 'border-orange-400 bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-200 dark:border-orange-600'
+                  : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4 rotate-90" />
+              <span className="hidden sm:inline">LLM Stats</span>
             </button>
             <button
               onClick={toggleMainView}
@@ -246,8 +259,20 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 }
 
 function RequireAuth({ children }: { children: ReactElement }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Listen for auth-unauthorized event (triggered when 401 response received)
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      logout();
+      navigate('/login', { replace: true });
+    };
+
+    window.addEventListener('auth-unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth-unauthorized', handleUnauthorized);
+  }, [logout, navigate]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
@@ -296,6 +321,16 @@ function App() {
           <RequireAuth>
             <MainLayout>
               <EvaluationPage />
+            </MainLayout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/llm-stats"
+        element={
+          <RequireAuth>
+            <MainLayout>
+              <LLMStatsPage />
             </MainLayout>
           </RequireAuth>
         }
