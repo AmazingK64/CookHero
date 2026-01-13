@@ -44,11 +44,12 @@ class RetrievalResult:
 class RAGService:
     """
     Orchestrates the entire RAG pipeline.
-    
+
     Provides two main interfaces:
     1. retrieve() - Query rewriting and retrieval, returns context
     2. ask_with_generation() - Full RAG + LLM generation pipeline
     """
+
     _instance = None
 
     def __new__(cls, *args, **kwargs):
@@ -57,14 +58,14 @@ class RAGService:
         return cls._instance
 
     def __init__(self, config: RAGConfig | None = None):
-        if hasattr(self, '_initialized') and self._initialized:
+        if hasattr(self, "_initialized") and self._initialized:
             return
 
         logger.info("Initializing RAGService")
         self.config = config or DefaultRAGConfig
         self.db_config = settings.database
         self.embeddings = get_embedding_model(self.config)
-        
+
         self.retrieval_modules: Dict[str, RetrievalOptimizationModule] = {}
         self.reranker: BaseReranker | None = None
 
@@ -78,9 +79,12 @@ class RAGService:
         if self.config.reranker.enabled:
             if self.config.reranker.type == "siliconflow":
                 from app.rag.rerankers.siliconflow_reranker import SiliconFlowReranker
+
                 self.reranker = SiliconFlowReranker(self.config.reranker)
             else:
-                logger.warning(f"Reranker type '{self.config.reranker.type}' not recognized. Reranking disabled.")
+                logger.warning(
+                    f"Reranker type '{self.config.reranker.type}' not recognized. Reranking disabled."
+                )
 
         # Initialize cache manager if enabled
         self.cache_manager: CacheManager | None = None
@@ -146,11 +150,12 @@ class RAGService:
     # =========================================================================
 
     async def retrieve(
-        self, 
-        query: str, 
+        self,
+        query: str,
         use_intelligent_ranker: bool = True,
         skip_rewrite: bool = False,
         user_id: str | None = None,
+        conversation_id: str | None = None,
     ) -> RetrievalResult:
         """Perform query rewriting and retrieval only, without LLM generation."""
         if not self.retrieval_modules:
@@ -159,14 +164,22 @@ class RAGService:
         logger.info("retrieval start query='%s'", query[:80])
 
         # Query rewriting
-        rewritten_query = query if skip_rewrite else await self.generation_module.rewrite_query(query)
-        
+        rewritten_query = (
+            query
+            if skip_rewrite
+            else await self.generation_module.rewrite_query(
+                query, user_id=user_id, conversation_id=conversation_id
+            )
+        )
+
         # Metadata filter extraction (from cached metadata, no DB access)
         filter_catalog = document_repository.get_metadata_for_filter(user_id)
-        metadata_expression = await self.metadata_filter_extractor.build_filter_expression(
-            query, filter_catalog
+        metadata_expression = (
+            await self.metadata_filter_extractor.build_filter_expression(
+                query, filter_catalog
+            )
         )
-        
+
         # Execute retrieval across all sources
         all_retrieved_docs = await self._execute_retrieval(
             rewritten_query,
@@ -177,25 +190,27 @@ class RAGService:
         )
 
         # Rerank if enabled
-        reranked_docs = await self._rerank_if_needed(rewritten_query, all_retrieved_docs)
-        
+        reranked_docs = await self._rerank_if_needed(
+            rewritten_query, all_retrieved_docs
+        )
+
         # Post-process: fetch parent documents from database
         processed_docs = await document_processor.post_process_retrieval(reranked_docs)
-        
+
         # Build context string
         context_parts = [doc.page_content for doc in processed_docs]
         context = "\n\n".join(context_parts) if context_parts else ""
-        
+
         # Extract sources for frontend display
         sources = self._extract_sources(processed_docs)
         self._log_retrieval_summary("processed", processed_docs)
-        
+
         return RetrievalResult(
             original_query=query,
             rewritten_query=rewritten_query,
             context=context,
             documents=processed_docs,
-            sources=sources
+            sources=sources,
         )
 
     # =========================================================================
@@ -212,7 +227,7 @@ class RAGService:
     ) -> List[Document]:
         """Execute retrieval across all configured sources."""
         all_docs: List[Document] = []
-        
+
         for source_name, module in self.retrieval_modules.items():
             docs = await self._retrieve_from_source(
                 source_name=source_name,
@@ -226,7 +241,7 @@ class RAGService:
             all_docs.extend(docs)
 
             self._log_retrieval_summary(f"source={source_name}", docs)
-        
+
         logger.info("aggregated retrieved docs=%d", len(all_docs))
         return all_docs
 
@@ -242,7 +257,7 @@ class RAGService:
     ) -> List[Document]:
         """Retrieve documents from a single source with caching."""
         logger.info("retrieving source=%s", source_name)
-        
+
         # Check cache
         if self.cache_manager:
             cached_docs = await self.cache_manager.get(
@@ -251,7 +266,11 @@ class RAGService:
                 user_id if source_name == "personal" else None,
             )
             if cached_docs:
-                logger.info("Using cached results for source '%s': %d documents", source_name, len(cached_docs))
+                logger.info(
+                    "Using cached results for source '%s': %d documents",
+                    source_name,
+                    len(cached_docs),
+                )
                 for doc in cached_docs:
                     if "retrieval_score" not in doc.metadata:
                         doc.metadata["retrieval_score"] = 1.0
@@ -261,7 +280,9 @@ class RAGService:
         # Determine ranker configuration
         ranker_type = ranker_weights = None
         if use_intelligent_ranker:
-            ranker_type, ranker_weights = retrieval_module.intelligent_ranker_selection(rewritten_query)
+            ranker_type, ranker_weights = retrieval_module.intelligent_ranker_selection(
+                rewritten_query
+            )
 
         # Execute search
         try:
@@ -274,14 +295,20 @@ class RAGService:
                 expr=expr,
             )
         except Exception as exc:
-            logger.error("Error during retrieval from source '%s': %s", source_name, exc)
+            logger.error(
+                "Error during retrieval from source '%s': %s", source_name, exc
+            )
             return []
 
         # Annotate documents with scores and source
         for doc, score in zip(retrieved_docs, retrieved_scores):
             existing_source = doc.metadata.get("data_source")
             if existing_source and existing_source != source_name:
-                logger.warning("Data source mismatch (metadata=%s, expected=%s). Overriding.", existing_source, source_name)
+                logger.warning(
+                    "Data source mismatch (metadata=%s, expected=%s). Overriding.",
+                    existing_source,
+                    source_name,
+                )
             doc.metadata["data_source"] = existing_source or source_name
             doc.metadata["retrieval_score"] = score
 
@@ -291,10 +318,17 @@ class RAGService:
             parent_id = doc.metadata.get("parent_id")
             if parent_id not in unique_docs:
                 unique_docs[parent_id] = doc
-            elif doc.metadata["retrieval_score"] > unique_docs[parent_id].metadata["retrieval_score"]:
+            elif (
+                doc.metadata["retrieval_score"]
+                > unique_docs[parent_id].metadata["retrieval_score"]
+            ):
                 unique_docs[parent_id] = doc
-        
-        final_docs = sorted(unique_docs.values(), key=lambda d: d.metadata.get("retrieval_score", 0.0), reverse=True)
+
+        final_docs = sorted(
+            unique_docs.values(),
+            key=lambda d: d.metadata.get("retrieval_score", 0.0),
+            reverse=True,
+        )
 
         # Cache results
         if self.cache_manager:
@@ -308,7 +342,9 @@ class RAGService:
         return final_docs
 
     @staticmethod
-    def _build_filter_expr(metadata_expression: Optional[str], source_name: str, user_id: Optional[str]) -> Optional[str]:
+    def _build_filter_expr(
+        metadata_expression: Optional[str], source_name: str, user_id: Optional[str]
+    ) -> Optional[str]:
         """Build filter expression with user scoping for personal documents."""
         if source_name != "personal" or not user_id:
             return metadata_expression
@@ -354,7 +390,7 @@ class RAGService:
 
         # Create chunks
         chunks = document_processor.create_chunks(document_id, content, metadata)
-        
+
         if chunks:
             retrieval_module = self.retrieval_modules["personal"]
             await asyncio.to_thread(retrieval_module.vectorstore.add_documents, chunks)
@@ -397,13 +433,15 @@ class RAGService:
 
         retrieval_module = self.retrieval_modules["personal"]
         expr = f'parent_id == "{document_id}" and user_id == "{user_id}"'
-        
+
         try:
             await asyncio.to_thread(
                 retrieval_module.vectorstore.col.delete,  # type: ignore
-                expr
+                expr,
             )
-            logger.info("Deleted personal document chunks id=%s user=%s", document_id, user_id)
+            logger.info(
+                "Deleted personal document chunks id=%s user=%s", document_id, user_id
+            )
         except Exception as e:
             logger.warning("Failed to delete personal document chunks: %s", e)
 
@@ -422,14 +460,16 @@ class RAGService:
         summaries = []
         for doc in docs:
             meta = doc.metadata or {}
-            summaries.append({
-                "rerank_score": meta.get("rerank_score"),
-                "dish_name": meta.get("dish_name"),
-                "difficulty": meta.get("difficulty"),
-                "category": meta.get("category"),
-                "parent_id": meta.get("parent_id"),
-                "retrieval_score": meta.get("retrieval_score"),
-            })
+            summaries.append(
+                {
+                    "rerank_score": meta.get("rerank_score"),
+                    "dish_name": meta.get("dish_name"),
+                    "difficulty": meta.get("difficulty"),
+                    "category": meta.get("category"),
+                    "parent_id": meta.get("parent_id"),
+                    "retrieval_score": meta.get("retrieval_score"),
+                }
+            )
         logger.info("retrieval %s docs=%d", stage, len(docs))
         for summary in summaries:
             logger.info("  %s", summary)
@@ -437,7 +477,7 @@ class RAGService:
     def _extract_sources(self, documents: List[Document]) -> List[Dict]:
         """
         Extract source information from documents for frontend display.
-        
+
         Returns unified format: {"type": "rag", "info": str, "url": optional str}
         The 'info' field combines dish_name/title for display.
         """

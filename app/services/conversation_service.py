@@ -122,12 +122,14 @@ class ChatContext:
     web_search_context: str = ""
     rag_context: str = ""
     rewritten_query: str = ""
-    
+
     # Vision/Multimodal context
-    images: Optional[List[Dict[str, str]]] = None  # List of {"data": base64, "mime_type": ...}
+    images: Optional[List[Dict[str, str]]] = (
+        None  # List of {"data": base64, "mime_type": ...}
+    )
     vision_result: Optional[VisionAnalysisResult] = None
     vision_context: str = ""  # Context built from vision analysis
-    
+
     # Timing metrics (milliseconds)
     thinking_start_time: Optional[float] = None
     thinking_end_time: Optional[float] = None
@@ -314,7 +316,7 @@ class ConversationService:
         if ctx.images:
             async for event in self._process_vision(ctx):
                 yield event
-            
+
             # If vision result indicates non-food content, return direct response
             if ctx.vision_result and not ctx.vision_result.is_food_related:
                 # Save user message before returning (include vision context)
@@ -329,10 +331,10 @@ class ConversationService:
         # Phase 2: Intent Detection
         intent_result = await self._detect_intent(ctx)
         yield f"data: {json.dumps({'type': 'intent', 'data': {'need_rag': intent_result.need_rag, 'intent': intent_result.intent.value, 'reason': intent_result.reason}})}\n\n"
-        
+
         yield self._emit_thinking(ctx, f"🔍 意图识别完成: {intent_result.intent.value}")
-        yield self._emit_thinking(ctx,
-            f"📋 是否需要检索: {'是' if intent_result.need_rag else '否'}"
+        yield self._emit_thinking(
+            ctx, f"📋 是否需要检索: {'是' if intent_result.need_rag else '否'}"
         )
         yield self._emit_thinking(ctx, f"💭 判断依据: {intent_result.reason}")
 
@@ -376,7 +378,7 @@ class ConversationService:
 
         # Generate response with all collected context
         yield self._emit_thinking(ctx, "🤖 开始生成回答...")
-        
+
         # End thinking phase, start answer phase
         ctx.thinking_end_time = time.time()
         ctx.answer_start_time = time.time()
@@ -395,7 +397,9 @@ class ConversationService:
 
         # Trigger async context compression
         asyncio.create_task(
-            self.context_compressor.maybe_compress(ctx.conv_id, conversation_repository)
+            self.context_compressor.maybe_compress(
+                ctx.conv_id, conversation_repository, user_id=ctx.user_id
+            )
         )
 
     # =========================================================================
@@ -411,7 +415,7 @@ class ConversationService:
         images: Optional[List[Dict[str, str]]] = None,
     ) -> ChatContext:
         """Initialize chat context with conversation data.
-        
+
         Note: User message is NOT saved here. It will be saved after vision
         analysis completes (if images are provided) so that the vision context
         can be included in the message content.
@@ -429,15 +433,18 @@ class ConversationService:
 
         # Load history (before adding new message)
         history = await conversation_repository.get_history(conv_id, limit=100) or []
-        compressed_summary, compressed_count = (
-            await conversation_repository.get_compressed_summary(conv_id)
-        )
+        (
+            compressed_summary,
+            compressed_count,
+        ) = await conversation_repository.get_compressed_summary(conv_id)
 
         # Build history structures (append sources to assistant content)
         history_dicts = [
             {
                 "role": h["role"],
-                "content": self._format_content_with_sources(h["content"], h.get("sources"))
+                "content": self._format_content_with_sources(
+                    h["content"], h.get("sources")
+                )
                 if h["role"] == "assistant"
                 else h["content"],
             }
@@ -476,7 +483,7 @@ class ConversationService:
     async def _save_user_message(self, ctx: ChatContext) -> None:
         """
         Save user message to database with vision context if available.
-        
+
         This method is called after vision analysis completes so that
         the vision context can be included in the message content.
         This ensures that follow-up messages can access the image analysis
@@ -484,23 +491,23 @@ class ConversationService:
         """
         # Build message content with vision context
         content = ctx.message
-        
+
         if ctx.vision_context:
             # Append vision context to the user message so it's part of history
             content = f"{ctx.message}\n\n[图片分析]\n{ctx.vision_context}"
-        
+
         # Save to database
         await conversation_repository.add_message(
             conversation_id=ctx.conv_id,
             role="user",
             content=content,
         )
-        
+
         # Update history with the new message (for current request context)
         new_message = {"role": "user", "content": content}
         ctx.history.append(new_message)
         ctx.history_dicts.append(new_message)
-        
+
         # Rebuild history text to include the new message
         ctx.history_text = self.context_manager.build_history_text(
             history=ctx.history_dicts,
@@ -518,7 +525,11 @@ class ConversationService:
         history_text = ctx.history_text
         if ctx.vision_context:
             history_text = f"{ctx.vision_context}\n\n{history_text}"
-        return await self.intent_detector.detect(history_text)
+        return await self.intent_detector.detect(
+            history_text,
+            user_id=ctx.user_id,
+            conversation_id=ctx.conv_id,
+        )
 
     # =========================================================================
     # Phase 1.5: Vision Processing
@@ -527,14 +538,16 @@ class ConversationService:
     async def _process_vision(self, ctx: ChatContext) -> AsyncGenerator[str, None]:
         """
         Process images using vision model.
-        
+
         Yields SSE events for vision analysis progress.
         """
         if not ctx.images:
             return
-        
-        yield self._emit_thinking(ctx, f"📷 检测到 {len(ctx.images)} 张图片，正在分析...")
-        
+
+        yield self._emit_thinking(
+            ctx, f"📷 检测到 {len(ctx.images)} 张图片，正在分析..."
+        )
+
         try:
             # Convert image data to ImageInput objects
             image_inputs = []
@@ -542,73 +555,79 @@ class ConversationService:
                 image_inputs.append(
                     ImageInput.from_base64(
                         data=img_data["data"],
-                        mime_type=img_data.get("mime_type", "image/jpeg")
+                        mime_type=img_data.get("mime_type", "image/jpeg"),
                     )
                 )
-            
+
             # Analyze images with vision agent
             vision_result = await vision_agent.analyze(
                 images=image_inputs,
                 user_query=ctx.message,
                 history_context=ctx.history_text[:2000] if ctx.history_text else "",
+                user_id=ctx.user_id,
+                conversation_id=ctx.conv_id,
             )
-            
+
             # Store result in context
             ctx.vision_result = vision_result
-            
+
             # Emit vision result event
             yield f"data: {json.dumps({'type': 'vision', 'data': vision_result.to_dict()})}\n\n"
-            
+
             # Log and emit thinking
             yield self._emit_thinking(
-                ctx, 
-                f"📷 图片分析完成: {'与食物相关' if vision_result.is_food_related else '与食物无关'}"
+                ctx,
+                f"📷 图片分析完成: {'与食物相关' if vision_result.is_food_related else '与食物无关'}",
             )
-            yield self._emit_thinking(ctx, f"📷 识别内容: {vision_result.description[:100]}")
-            
+            yield self._emit_thinking(
+                ctx, f"📷 识别内容: {vision_result.description[:100]}"
+            )
+
             if vision_result.is_food_related:
                 # Build context for RAG pipeline
                 ctx.vision_context = vision_agent.build_context_for_rag(
                     vision_result, ctx.message
                 )
                 yield self._emit_thinking(ctx, f"📷 意图: {vision_result.intent.value}")
-            
+
             logger.info(
                 "Vision analysis: food_related=%s, intent=%s, confidence=%.2f",
                 vision_result.is_food_related,
                 vision_result.intent.value,
                 vision_result.confidence,
             )
-            
+
         except Exception as e:
             logger.error(f"Vision processing error: {e}", exc_info=True)
             yield self._emit_thinking(ctx, f"📷 图片分析出错: {str(e)[:50]}")
             # Continue without vision context on error
 
-    async def _handle_non_food_image(self, ctx: ChatContext) -> AsyncGenerator[str, None]:
+    async def _handle_non_food_image(
+        self, ctx: ChatContext
+    ) -> AsyncGenerator[str, None]:
         """
         Handle non-food related image with direct response.
-        
+
         This short-circuits the normal conversation flow for non-cooking content.
         """
         if not ctx.vision_result or not ctx.vision_result.direct_response:
             return
-        
+
         yield self._emit_thinking(ctx, "💬 图片与烹饪无关，直接回复...")
-        
+
         # End thinking phase
         ctx.thinking_end_time = time.time()
         ctx.answer_start_time = time.time()
-        
+
         # Use direct response from vision analysis
         response = ctx.vision_result.direct_response
         yield f"data: {json.dumps({'type': 'text', 'content': response})}\n\n"
-        
+
         ctx.answer_end_time = time.time()
-        
+
         # Emit empty sources (no RAG used)
         yield f"data: {json.dumps({'type': 'sources', 'data': []})}\n\n"
-        
+
         # Save response with vision intent
         await conversation_repository.add_message(
             conversation_id=ctx.conv_id,
@@ -617,10 +636,16 @@ class ConversationService:
             sources=None,
             intent=ctx.vision_result.intent.value,
             thinking=ctx.thinking_steps,
-            thinking_duration_ms=int((ctx.thinking_end_time - ctx.thinking_start_time) * 1000) if ctx.thinking_start_time and ctx.thinking_end_time else None,
-            answer_duration_ms=int((ctx.answer_end_time - ctx.answer_start_time) * 1000) if ctx.answer_start_time and ctx.answer_end_time else None,
+            thinking_duration_ms=int(
+                (ctx.thinking_end_time - ctx.thinking_start_time) * 1000
+            )
+            if ctx.thinking_start_time and ctx.thinking_end_time
+            else None,
+            answer_duration_ms=int((ctx.answer_end_time - ctx.answer_start_time) * 1000)
+            if ctx.answer_start_time and ctx.answer_end_time
+            else None,
         )
-        
+
         yield f"data: {json.dumps({'type': 'done', 'conversation_id': ctx.conv_id})}\n\n"
 
     # =========================================================================
@@ -642,8 +667,12 @@ class ConversationService:
 
         decision = await web_search_tool.decide_search(
             query=ctx.message,
-            document_summary=document_repository.get_metadata_options(user_id=ctx.user_id),
+            document_summary=document_repository.get_metadata_options(
+                user_id=ctx.user_id
+            ),
             history_text=ctx.history_text,
+            user_id=ctx.user_id,
+            conversation_id=ctx.conv_id,
         )
 
         events.append(
@@ -677,19 +706,23 @@ class ConversationService:
 
         if search_results:
             events.append(
-                self._emit_thinking(ctx, f"🌐 Web 搜索找到 {len(search_results)} 条结果")
+                self._emit_thinking(
+                    ctx, f"🌐 Web 搜索找到 {len(search_results)} 条结果"
+                )
             )
 
             # Log top results
             for i, result in enumerate(search_results[:3]):
                 events.append(
                     self._emit_thinking(
-                        ctx, f"  🔗 [{i+1}] {result.title} ({result.source})"
+                        ctx, f"  🔗 [{i + 1}] {result.title} ({result.source})"
                     )
                 )
             if len(search_results) > 3:
                 events.append(
-                    self._emit_thinking(ctx, f"  ...还有 {len(search_results) - 3} 条结果")
+                    self._emit_thinking(
+                        ctx, f"  ...还有 {len(search_results) - 3} 条结果"
+                    )
                 )
 
             # Update context
@@ -729,6 +762,8 @@ class ConversationService:
             ctx.rewritten_query = await self.query_rewriter.rewrite(
                 current_query=ctx.message,
                 history_text=ctx.history_text,
+                user_id=ctx.user_id,
+                conversation_id=ctx.conv_id,
             )
             yield self._emit_thinking(ctx, f"✍️ 重写后的查询语句: {ctx.rewritten_query}")
 
@@ -739,6 +774,7 @@ class ConversationService:
                 ctx.rewritten_query,
                 skip_rewrite=True,
                 user_id=ctx.user_id,
+                conversation_id=ctx.conv_id,
             )
 
             # Process retrieval results (updates ctx.sources and ctx.rag_context)
@@ -751,8 +787,9 @@ class ConversationService:
 
         except Exception as e:
             logger.error(f"RAG error: {e}", exc_info=True)
-            yield self._emit_thinking(ctx, f"❌ 检索遇到问题: {str(e)[:50]}，改为直接回答。")
-
+            yield self._emit_thinking(
+                ctx, f"❌ 检索遇到问题: {str(e)[:50]}，改为直接回答。"
+            )
 
     async def _process_retrieval_results(
         self,
@@ -784,7 +821,7 @@ class ConversationService:
                     doc_preview += "..."
                 yield self._emit_thinking(
                     ctx,
-                    f"  📄 [{i+1}] {doc_title} (难度: {doc_difficulty}, 分类: {doc_category}): {doc_preview}"
+                    f"  📄 [{i + 1}] {doc_title} (难度: {doc_difficulty}, 分类: {doc_category}): {doc_preview}",
                 )
 
             if doc_count > 3:
@@ -833,7 +870,11 @@ class ConversationService:
             user_instruction=ctx.user_instruction,
         )
 
-        async for chunk in self.llm_orchestrator.stream(messages_for_llm):
+        async for chunk in self.llm_orchestrator.stream(
+            messages_for_llm,
+            user_id=ctx.user_id,
+            conversation_id=ctx.conv_id,
+        ):
             yield chunk
 
     # =========================================================================
@@ -854,10 +895,14 @@ class ConversationService:
         answer_duration_ms = None
 
         if ctx.thinking_start_time and ctx.thinking_end_time:
-            thinking_duration_ms = int((ctx.thinking_end_time - ctx.thinking_start_time) * 1000)
+            thinking_duration_ms = int(
+                (ctx.thinking_end_time - ctx.thinking_start_time) * 1000
+            )
 
         if ctx.answer_start_time and ctx.answer_end_time:
-            answer_duration_ms = int((ctx.answer_end_time - ctx.answer_start_time) * 1000)
+            answer_duration_ms = int(
+                (ctx.answer_end_time - ctx.answer_start_time) * 1000
+            )
 
         message = await conversation_repository.add_message(
             conversation_id=ctx.conv_id,
@@ -871,7 +916,7 @@ class ConversationService:
         )
 
         # Schedule RAG evaluation if context was used
-        if ctx.rag_context and message:
+        if intent_result.need_rag and ctx.rag_context and message:
             asyncio.create_task(
                 evaluation_service.schedule_evaluation(
                     message_id=str(message.id),
@@ -905,7 +950,7 @@ class ConversationService:
         Clearly distinguishes between different context sources.
         """
         parts = []
-        
+
         # Add vision context first (if available)
         if vision_context.strip():
             parts.append(
@@ -913,7 +958,7 @@ class ConversationService:
                 "用户上传了图片，以下是图片分析结果：\n"
                 f"{vision_context.strip()}\n"
             )
-        
+
         parts.append(f"【重写后的检索语句】\n{rewritten_query}\n")
 
         # Add RAG context (local knowledge)
@@ -932,7 +977,11 @@ class ConversationService:
                 f"{web_context.strip()}\n"
             )
 
-        if not rag_context.strip() and not web_context.strip() and not vision_context.strip():
+        if (
+            not rag_context.strip()
+            and not web_context.strip()
+            and not vision_context.strip()
+        ):
             parts.append("（未找到相关参考内容，请结合通用烹饪知识回答）\n")
 
         parts.append(
@@ -943,7 +992,7 @@ class ConversationService:
         )
 
         return "\n".join(parts)
-    
+
     def _format_content_with_sources(
         self,
         content: str,
