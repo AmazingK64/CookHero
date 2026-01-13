@@ -1,4 +1,4 @@
-# app/conversation/repository.py
+# app/database/conversation_repository.py
 """
 Repository layer for conversation persistence using PostgreSQL.
 Provides async CRUD operations for conversations and messages.
@@ -10,7 +10,6 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import select, delete, func
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database.models import ConversationModel, MessageModel
@@ -157,7 +156,7 @@ class ConversationRepository:
 
             stmt = delete(ConversationModel).where(ConversationModel.id == conv_uuid)
             result = await session.execute(stmt)
-            return result.rowcount > 0 # type: ignore
+            return result.rowcount > 0  # type: ignore
 
     async def update_title(self, conversation_id: str, title: str) -> bool:
         """Update the title of a conversation."""
@@ -176,7 +175,7 @@ class ConversationRepository:
 
             conversation.title = title
             await session.flush()
-            
+
             logger.info(
                 "Updated title for conversation %s to '%s'",
                 conversation_id,
@@ -191,7 +190,7 @@ class ConversationRepository:
         offset: int = 0,
     ) -> tuple[List[dict], int]:
         """List conversations with metadata, ordered by updated_at desc.
-        
+
         Returns:
             Tuple of (conversations list, total count)
         """
@@ -200,14 +199,14 @@ class ConversationRepository:
             base_filter = []
             if user_id:
                 base_filter.append(ConversationModel.user_id == user_id)
-            
+
             # Get total count
             count_stmt = select(func.count(ConversationModel.id))
             if base_filter:
                 count_stmt = count_stmt.where(*base_filter)
             count_result = await session.execute(count_stmt)
             total_count = count_result.scalar() or 0
-            
+
             # Get paginated conversations
             stmt = (
                 select(ConversationModel)
@@ -248,7 +247,7 @@ class ConversationRepository:
     ) -> tuple[Optional[str], int]:
         """
         Get the compressed summary and count for a conversation.
-        
+
         Returns:
             Tuple of (compressed_summary, compressed_message_count)
         """
@@ -262,10 +261,10 @@ class ConversationRepository:
                 ConversationModel.compressed_summary,
                 ConversationModel.compressed_message_count,
             ).where(ConversationModel.id == conv_uuid)
-            
+
             result = await session.execute(stmt)
             row = result.one_or_none()
-            
+
             if row:
                 return row[0], row[1]
             return None, 0
@@ -278,12 +277,12 @@ class ConversationRepository:
     ) -> bool:
         """
         Update the compressed summary for a conversation.
-        
+
         Args:
             conversation_id: The conversation ID
             summary: The new compressed summary
             message_count: Number of messages included in the summary
-            
+
         Returns:
             True if update was successful
         """
@@ -303,7 +302,7 @@ class ConversationRepository:
             conversation.compressed_summary = summary
             conversation.compressed_message_count = message_count
             await session.flush()
-            
+
             logger.info(
                 "Updated compressed summary for conversation %s (messages: %d)",
                 conversation_id,
