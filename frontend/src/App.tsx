@@ -102,11 +102,12 @@ function ChatView() {
       
       {isAgentMode ? (
         <>
-          <AgentChatWindow 
-            messages={messages} 
-            isLoading={isLoading} 
-            onSuggestionClick={handleSuggestionClick} 
-          />
+           <AgentChatWindow 
+             messages={messages} 
+             isLoading={isLoading} 
+             onSuggestionClick={handleSuggestionClick} 
+             error={error}
+           />
           <div className="p-4 max-w-4xl w-full mx-auto">
             <AgentChatInput
               onSend={sendMessage}
@@ -124,11 +125,12 @@ function ChatView() {
         </>
       ) : (
         <>
-          <ChatWindow 
-            messages={messages} 
-            isLoading={isLoading} 
-            onSuggestionClick={handleSuggestionClick} 
-          />
+           <ChatWindow 
+             messages={messages} 
+             isLoading={isLoading} 
+             onSuggestionClick={handleSuggestionClick}
+             error={error}
+           />
           <div className="p-4 max-w-4xl w-full mx-auto">
             <ChatInput
               onSend={sendMessage}
