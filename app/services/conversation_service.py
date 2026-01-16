@@ -50,9 +50,9 @@ class ConversationService:
     """
 
     # Number of recent uncompressed messages to keep before considering compression
-    RECENT_MESSAGES_LIMIT = 10
+    RECENT_MESSAGES_LIMIT = 20
     # Number of messages to compress each time
-    COMPRESSION_THRESHOLD = 6
+    COMPRESSION_THRESHOLD = 10
 
     def __init__(self):
         """Initialize the conversation service with modular components."""
