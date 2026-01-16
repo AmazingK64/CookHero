@@ -19,7 +19,6 @@ class AgentChunkType(str, Enum):
     TRACE = "trace"  # 执行轨迹
     TOOL_CALL = "tool_call"  # Tool 调用
     TOOL_RESULT = "tool_result"  # Tool 执行结果
-    SKILL_LOAD = "skill_load"  # Skill 加载
     ERROR = "error"  # 错误信息
     DONE = "done"  # 完成信号
 
@@ -71,15 +70,6 @@ class ToolResult(BaseModel):
     data: Any = None
     error: str | None = None
 
-
-class SkillMeta(BaseModel):
-    """Skill 轻量元数据（始终加载）"""
-
-    name: str
-    description: str
-    keywords: list[str] = []
-
-
 @dataclass
 class AgentContext:
     """Agent 执行所需的完整上下文"""
@@ -92,7 +82,6 @@ class AgentContext:
     history_summary: str | None = None  # 历史摘要（压缩后）
     recent_messages: list[dict] = field(default_factory=list)  # 近期消息
     available_tools: list[dict] = field(default_factory=list)  # 可用 Tool schema
-    available_skills: list[dict] = field(default_factory=list)  # 可用 Skill 元数据
     current_message: str = ""  # 当前用户消息
 
 
@@ -104,7 +93,6 @@ class AgentConfig:
     description: str
     system_prompt: str
     tools: list[str] = field(default_factory=list)  # Tool 名称列表
-    skills: list[str] = field(default_factory=list)  # Skill 名称列表
     max_iterations: int = 32
 
 
