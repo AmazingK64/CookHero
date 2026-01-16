@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
 from app.config import settings, LLMType
-from app.llm import ChatOpenAIProvider, get_usage_callbacks, llm_context
+from app.llm import LLMProvider, get_usage_callbacks, llm_context
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,7 @@ class WebSearchTool:
         llm_type: LLMType | str = LLMType.FAST,
         api_key: Optional[str] = None,
         max_results: Optional[int] = None,
-        provider: ChatOpenAIProvider | None = None,
+        provider: LLMProvider | None = None,
     ):
         """
         Initialize the Web Search Tool.
@@ -177,7 +177,7 @@ class WebSearchTool:
 
         # Initialize LLM for decision making
         self._llm_type = llm_type
-        self._provider = provider or ChatOpenAIProvider(settings.llm)
+        self._provider = provider or LLMProvider(settings.llm)
 
         # Create decision tool
         self._decision_tool = self._create_decision_tool()
@@ -185,7 +185,7 @@ class WebSearchTool:
         # Create LLM with callbacks and bind tools
         # Use tracked invoker for usage statistics
         self._callbacks = get_usage_callbacks()
-        base_llm = self._provider.create_base_llm(llm_type, temperature=0.3)
+        base_llm = self._provider.create_llm(llm_type, temperature=0.3)
         self._llm = base_llm.bind_tools(
             [self._decision_tool], tool_choice="make_search_decision"
         )
