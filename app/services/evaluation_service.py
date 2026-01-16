@@ -96,11 +96,11 @@ class EvaluationService:
         self._embeddings = None
         self._callbacks = get_usage_callbacks()
 
-    def _init_ragas(self):
-        """Lazily initialize RAGAS components."""
-        if self._ragas_initialized:
-            return
-
+    def _init_ragas_sync(self):
+        """
+        Synchronous RAGAS initialization (runs in thread pool).
+        This method may block due to HuggingFace model downloads.
+        """
         try:
             from ragas.metrics import (
                 faithfulness,
@@ -163,6 +163,16 @@ class EvaluationService:
             logger.error("Failed to initialize RAGAS: %s", e)
             raise
 
+    async def _init_ragas(self):
+        """
+        Lazily initialize RAGAS components asynchronously.
+        Runs blocking initialization in thread pool to avoid blocking the event loop.
+        """
+        if self._ragas_initialized:
+            return
+
+        await asyncio.to_thread(self._init_ragas_sync)
+
     async def evaluate(
         self,
         query: str,
@@ -180,7 +190,7 @@ class EvaluationService:
         Returns:
             Dictionary of metric scores
         """
-        self._init_ragas()
+        await self._init_ragas()
 
         try:
             from datasets import Dataset
