@@ -1,142 +1,128 @@
+"""
+LLM Provider - 统一的 LLM 初始化和调用入口
+
+核心概念:
+1. LLMProvider - 全局 LLM 提供者，管理配置和创建 LLM 实例
+2. LLMInvoker - LLM 调用器，封装了调用逻辑和 usage tracking
+"""
+
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
-from typing import Any, AsyncIterator, Protocol, Sequence, List, Optional
+from typing import Any, AsyncIterator, List, Optional
+
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_openai import ChatOpenAI
 
 from app.config.llm_config import LLMConfig, LLMProfileConfig, LLMType
 
 
-def create_chat_openai(
-    *,
-    model: str,
-    api_key: str,
-    base_url: Optional[str] = None,
-    temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
-    streaming: bool = False,
-    timeout: Optional[int] = None,
-    **kwargs: Any,
-) -> ChatOpenAI:
+class LLMProvider:
     """
-    Create a ChatOpenAI instance with the given parameters.
+    LLM 提供者 - 统一的 LLM 创建和管理入口
 
-    This is the unified factory function for creating LLM instances.
-    Use this instead of directly instantiating ChatOpenAI.
+    使用方式:
+        provider = LLMProvider(settings.llm)
 
-    Args:
-        model: Model name
-        api_key: API key
-        base_url: Base URL for the API (optional)
-        temperature: Temperature setting
-        max_tokens: Maximum tokens for completion
-        streaming: Enable streaming mode
-        timeout: Request timeout in seconds
-        **kwargs: Additional ChatOpenAI parameters
+        # 创建带 usage tracking 的 invoker（推荐）
+        invoker = provider.create_invoker("fast")
+        response = await invoker.ainvoke(messages)
 
-    Returns:
-        ChatOpenAI instance
+        # 直接创建 ChatOpenAI 实例（不推荐，除非有特殊需求）
+        llm = provider.create_llm("normal", streaming=True)
     """
-    llm_kwargs: dict[str, Any] = {
-        "model": model,
-        "api_key": api_key,
-        "temperature": temperature,
-        "streaming": streaming,
-        **kwargs,
-    }
 
-    if base_url:
-        llm_kwargs["base_url"] = base_url
-    if max_tokens is not None:
-        llm_kwargs["max_completion_tokens"] = max_tokens
-    if timeout is not None:
-        llm_kwargs["timeout"] = timeout
+    def __init__(self, config: LLMConfig):
+        """
+        初始化 LLM Provider
 
-    return ChatOpenAI(**llm_kwargs)
+        Args:
+            config: LLM 配置（通常来自 settings.llm）
+        """
+        self._config = config
 
+    def get_profile(self, llm_type: LLMType | str | None = None) -> LLMProfileConfig:
+        """获取指定类型的 LLM 配置 profile"""
+        return self._config.get_profile(llm_type)
 
-class ModelSelectionStrategy(Protocol):
-    def choose(self, model_names: Sequence[str]) -> str: ...
+    def pick_model(self, llm_type: LLMType | str | None = None) -> str:
+        """
+        随机选择一个模型名称（用于负载均衡）
 
+        Args:
+            llm_type: LLM 类型 (fast/normal)
 
-@dataclass(frozen=True)
-class RandomChoiceStrategy:
-    def choose(self, model_names: Sequence[str]) -> str:
-        if not model_names:
+        Returns:
+            选中的模型名称
+        """
+        profile = self.get_profile(llm_type)
+        if not profile.model_names:
             raise ValueError("model_names cannot be empty")
-        return random.choice(list(model_names))
+        return random.choice(profile.model_names)
 
-
-@dataclass
-class ChatOpenAIProvider:
-    llm_config: LLMConfig
-    selector: ModelSelectionStrategy = RandomChoiceStrategy()
-
-    def profile(self, llm_type: LLMType | str | None) -> LLMProfileConfig:
-        return self.llm_config.get_profile(llm_type)
-
-    def choose_model(self, llm_type: LLMType | str | None) -> str:
-        profile = self.profile(llm_type)
-        return self.selector.choose(profile.model_names)
-
-    def create_base_llm(
+    def create_llm(
         self,
-        llm_type: LLMType | str | None,
+        llm_type: LLMType | str | None = None,
         *,
         streaming: bool = False,
         temperature: float | None = None,
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> ChatOpenAI:
-        profile = self.profile(llm_type)
+        """
+        创建原生 ChatOpenAI 实例
+
+        注意: 此方法创建的实例不包含 usage tracking，
+        推荐使用 create_invoker() 方法获取带 tracking 的调用器
+
+        Args:
+            llm_type: LLM 类型 (fast/normal)
+            streaming: 是否启用流式输出
+            temperature: 温度参数（可选覆盖配置）
+            max_tokens: 最大 tokens（可选覆盖配置）
+            **kwargs: 其他 ChatOpenAI 参数
+
+        Returns:
+            ChatOpenAI 实例
+        """
+        profile = self.get_profile(llm_type)
         return ChatOpenAI(
             model=profile.pick_default_model(),
             api_key=profile.api_key,  # type: ignore
             base_url=profile.base_url,
-            temperature=profile.temperature if temperature is None else temperature,
-            max_completion_tokens=profile.max_tokens
-            if max_tokens is None
-            else max_tokens,
+            temperature=temperature if temperature is not None else profile.temperature,
+            max_completion_tokens=max_tokens
+            if max_tokens is not None
+            else profile.max_tokens,
             streaming=streaming,
             **kwargs,
         )
 
-    def bind_for_call(
-        self, llm: ChatOpenAI, llm_type: LLMType | str | None
-    ) -> ChatOpenAI:
-        model = self.choose_model(llm_type)
-        return llm.bind(model=model)  # type: ignore
-
-    def create_tracked_invoker(
+    def create_invoker(
         self,
-        llm_type: LLMType | str | None,
+        llm_type: LLMType | str | None = None,
         *,
         streaming: bool = False,
         temperature: float | None = None,
         max_tokens: int | None = None,
         **kwargs: Any,
-    ) -> "DynamicChatInvoker":
+    ) -> "LLMInvoker":
         """
-        Create a DynamicChatInvoker with usage tracking callbacks.
-
-        This method creates an invoker that automatically logs token usage
-        and other statistics to the database.
+        创建带 usage tracking 的 LLM 调用器（推荐使用）
 
         Args:
-            llm_type: LLM type (fast/normal)
-            streaming: Enable streaming mode
-            temperature: Override temperature
-            max_tokens: Override max tokens
-            **kwargs: Additional ChatOpenAI parameters
+            llm_type: LLM 类型 (fast/normal)
+            streaming: 是否启用流式输出
+            temperature: 温度参数（可选覆盖配置）
+            max_tokens: 最大 tokens（可选覆盖配置）
+            **kwargs: 其他 ChatOpenAI 参数
 
         Returns:
-            DynamicChatInvoker with usage tracking enabled
+            LLMInvoker 实例
         """
         from app.llm.callbacks import get_usage_callbacks
 
-        base_llm = self.create_base_llm(
+        base_llm = self.create_llm(
             llm_type,
             streaming=streaming,
             temperature=temperature,
@@ -144,7 +130,7 @@ class ChatOpenAIProvider:
             **kwargs,
         )
 
-        return DynamicChatInvoker(
+        return LLMInvoker(
             provider=self,
             llm_type=llm_type,
             base_llm=base_llm,
@@ -152,15 +138,32 @@ class ChatOpenAIProvider:
         )
 
 
-class DynamicChatInvoker:
+
+class LLMInvoker:
     """
-    A wrapper to dynamically bind ChatOpenAI model before each call.
-    Supports tool binding, callbacks, and other ChatOpenAI methods.
+    LLM 调用器 - 封装 LLM 调用逻辑
+
+    特性:
+    - 自动附加 usage tracking callbacks
+    - 支持动态模型选择（每次调用可选择不同模型）
+    - 支持 tool calling
+    - 支持流式输出
+
+    使用方式:
+        # 普通调用
+        response = await invoker.ainvoke(messages)
+
+        # 流式调用
+        async for chunk in invoker.astream(messages):
+            print(chunk.content)
+
+        # 带 tools 调用
+        response = await invoker.ainvoke_with_tools(messages, tools)
     """
 
     def __init__(
         self,
-        provider: ChatOpenAIProvider,
+        provider: LLMProvider,
         llm_type: LLMType | str | None,
         base_llm: ChatOpenAI,
         callbacks: List[BaseCallbackHandler] | None = None,
@@ -168,48 +171,63 @@ class DynamicChatInvoker:
         self._provider = provider
         self._llm_type = llm_type
         self._base_llm = base_llm
-        self._bound_tools: list[Any] = []  # Store bound tools
-        self._tool_choice: Any = None  # Store tool_choice parameter
-        self._callbacks: List[BaseCallbackHandler] = callbacks or []  # Store callbacks
+        self._callbacks = callbacks or []
 
-    def _bind(self) -> ChatOpenAI:
-        """Bind model and tools dynamically."""
-        llm = self._provider.bind_for_call(self._base_llm, self._llm_type)
+    def _get_llm_with_model(self, tools: list[Any] | None = None) -> ChatOpenAI:
+        """
+        获取绑定了随机模型的 LLM 实例
 
-        # If tools were bound, apply them
-        if self._bound_tools:
-            bind_kwargs: dict[str, Any] = {"tools": self._bound_tools}
-            if self._tool_choice is not None:
-                bind_kwargs["tool_choice"] = self._tool_choice
-            llm = llm.bind(**bind_kwargs)  # type: ignore
+        每次调用都会随机选择一个模型，实现负载均衡
+        """
+        model = self._provider.pick_model(self._llm_type)
+        llm = self._base_llm.bind(model=model)
+
+        if tools:
+            llm = llm.bind(tools=tools)  # type: ignore
 
         return llm  # type: ignore
 
-    def _build_config(self, kwargs: dict) -> dict:
-        """Build RunnableConfig with callbacks for LangChain invocation.
-
-        Uses 'config' parameter with 'callbacks' key which is the proper
-        LangChain way to pass callbacks through RunnableBinding objects.
-        """
+    def _prepare_config(self, kwargs: dict) -> dict:
+        """准备调用配置，合并 callbacks"""
+        # 提取已有的 callbacks
         call_callbacks = kwargs.pop("callbacks", None) or []
-        # Also check for config.callbacks pattern
         config = kwargs.pop("config", None) or {}
+
         if isinstance(config, dict):
             config_callbacks = config.get("callbacks", []) or []
         else:
             config_callbacks = []
 
+        # 合并所有 callbacks
         merged = list(call_callbacks) + list(config_callbacks) + self._callbacks
         if merged:
             kwargs["config"] = {"callbacks": merged}
+
         return kwargs
+    
+    async def ainvoke(self, messages: list, **kwargs: Any) -> Any:
+        """异步调用 LLM"""
+        kwargs = self._prepare_config(kwargs)
+        return await self._get_llm_with_model().ainvoke(messages, **kwargs)
 
-    async def ainvoke(self, *args: Any, **kwargs: Any) -> Any:
-        """Async invoke the LLM with dynamic model binding."""
-        kwargs = self._build_config(kwargs)
-        return await self._bind().ainvoke(*args, **kwargs)
+    async def ainvoke_with_tools(
+        self, messages: list, tools: list, **kwargs: Any
+    ) -> Any:
+        """异步调用 LLM（带 tools）"""
+        kwargs = self._prepare_config(kwargs)
+        return await self._get_llm_with_model(tools=tools).ainvoke(messages, **kwargs)
 
-    def astream(self, *args: Any, **kwargs: Any) -> AsyncIterator[Any]:
-        """Stream responses from the LLM with dynamic model binding."""
-        kwargs = self._build_config(kwargs)
-        return self._bind().astream(*args, **kwargs)
+    def astream(self, messages: list, **kwargs: Any) -> AsyncIterator[Any]:
+        """流式调用 LLM"""
+        kwargs = self._prepare_config(kwargs)
+        return self._get_llm_with_model().astream(messages, **kwargs)
+
+    async def astream_with_tools(
+        self, messages: list, tools: list, **kwargs: Any
+    ) -> AsyncIterator[Any]:
+        """流式调用 LLM（带 tools）"""
+        kwargs = self._prepare_config(kwargs)
+        async for chunk in self._get_llm_with_model(tools=tools).astream(
+            messages, **kwargs
+        ):
+            yield chunk
