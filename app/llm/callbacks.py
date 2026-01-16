@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.callbacks import UsageMetadataCallbackHandler
 from langchain_core.outputs import LLMResult
 
 from app.llm.context import get_llm_context
@@ -83,7 +84,7 @@ class LLMUsageCallbackHandler(BaseCallbackHandler):
         # 提取 token 使用信息
         usage_data = self._extract_usage(response)
         model_name = self._extract_model_name(response)
-
+        
         # 构建日志数据
         log_data = {
             "request_id": ctx.request_id,
@@ -91,6 +92,7 @@ class LLMUsageCallbackHandler(BaseCallbackHandler):
             "user_id": ctx.user_id,
             "conversation_id": ctx.conversation_id,
             "model_name": model_name,
+            "tool_name": self._extract_tool_name(response),
             "input_tokens": usage_data.get("input_tokens")
             or usage_data.get("prompt_tokens")
             if usage_data
@@ -169,6 +171,64 @@ class LLMUsageCallbackHandler(BaseCallbackHandler):
 
         return None
 
+    def _extract_tool_name(self, response: LLMResult) -> Optional[str]:
+        """从 LLMResult 中提取工具调用信息"""
+        # Method 1: Check in message.tool_calls (OpenAI format)
+        if response.generations and response.generations[0]:
+            gen = response.generations[0][0]
+            message = getattr(gen, "message", None)
+            if message and hasattr(message, "tool_calls"):
+                tool_calls = getattr(message, "tool_calls", None)
+                if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:
+                    # Extract first tool name
+                    tool_call = tool_calls[0]
+                    # Different formats: dict or object
+                    if isinstance(tool_call, dict):
+                        if tool_call.get("name"):
+                            return tool_call.get("name")
+                        return tool_call.get("function", {}).get("name")
+                    elif hasattr(tool_call, "name"):
+                        return tool_call.name
+                    elif hasattr(tool_call, "function") and hasattr(tool_call.function, "name"):
+                        return tool_call.function.name
+
+        # Method 2: Check in llm_output
+        if response.llm_output:
+            # Look for tool_calls in llm_output
+            tool_calls = response.llm_output.get("tool_calls")
+            if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:
+                tool_call = tool_calls[0]
+                if isinstance(tool_call, dict):
+                    return tool_call.get("function", {}).get("name")
+                elif hasattr(tool_call, "name"):
+                    return tool_call.name
+
+        # Method 3: Check in generation_info
+        if response.generations and response.generations[0]:
+            gen = response.generations[0][0]
+            if hasattr(gen, "generation_info") and gen.generation_info:
+                # Some providers store tool calls in generation_info
+                tool_calls = gen.generation_info.get("tool_calls")
+                if tool_calls and isinstance(tool_calls, list) and len(tool_calls) > 0:
+                    tool_call = tool_calls[0]
+                    if isinstance(tool_call, dict):
+                        return tool_call.get("function", {}).get("name")
+
+        # Method 4: Check in response_metadata
+        if response.generations and response.generations[0]:
+            gen = response.generations[0][0]
+            message = getattr(gen, "message", None)
+            if message:
+                # Check if there's tool usage info in metadata
+                metadata = getattr(message, "response_metadata", None)
+                if metadata:
+                    tool_name = metadata.get("tool_name") or metadata.get("function_name")
+                    if tool_name:
+                        return tool_name
+
+        return None
+
+
     def _schedule_write(self, log_data: Dict[str, Any]) -> None:
         """调度异步写入"""
         try:
@@ -201,6 +261,7 @@ class LLMUsageCallbackHandler(BaseCallbackHandler):
                     if log_data.get("conversation_id")
                     else None,
                     model_name=log_data.get("model_name"),
+                    tool_name=log_data.get("tool_name"),
                     input_tokens=log_data.get("input_tokens"),
                     output_tokens=log_data.get("output_tokens"),
                     total_tokens=log_data.get("total_tokens"),
@@ -209,8 +270,9 @@ class LLMUsageCallbackHandler(BaseCallbackHandler):
                 session.add(log)
 
             logger.debug(
-                "LLM usage logged: module=%s, tokens=%s",
+                "LLM usage logged: module=%s, tool=%s, tokens=%s",
                 log_data.get("module_name"),
+                log_data.get("tool_name"),
                 log_data.get("total_tokens"),
             )
         except Exception as e:
