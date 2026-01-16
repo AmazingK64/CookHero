@@ -16,7 +16,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 from app.config import settings, LLMType
-from app.llm import ChatOpenAIProvider, llm_context
+from app.llm import LLMProvider, llm_context
 from app.utils.structured_json import extract_first_valid_json
 
 logger = logging.getLogger(__name__)
@@ -111,12 +111,12 @@ class MetadataFilterExtractor:
     def __init__(
         self,
         llm_type: LLMType | str = LLMType.FAST,
-        provider: ChatOpenAIProvider | None = None,
+        provider: LLMProvider | None = None,
     ):
         self._llm_type = llm_type
-        self._provider = provider or ChatOpenAIProvider(settings.llm)
+        self._provider = provider or LLMProvider(settings.llm)
         # Use tracked invoker for usage statistics
-        self._llm = self._provider.create_tracked_invoker(llm_type, temperature=0.0)
+        self._llm = self._provider.create_invoker(llm_type, temperature=0.0)
 
         self.reference_material = self._load_reference_material()
 
@@ -141,7 +141,7 @@ class MetadataFilterExtractor:
             )
             # Use llm_context for usage tracking
             with llm_context(self.MODULE_NAME, user_id, conversation_id):
-                response = await self._llm.ainvoke(template.messages)
+                response = await self._llm.ainvoke(list(template.messages))
             content = response.content.strip()
             debugc = content
 

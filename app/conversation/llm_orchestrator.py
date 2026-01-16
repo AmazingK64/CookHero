@@ -3,7 +3,7 @@ from typing import AsyncGenerator, List, Optional
 from langchain_core.messages import BaseMessage
 
 from app.config import settings, LLMType
-from app.llm import ChatOpenAIProvider, llm_context
+from app.llm import LLMProvider, llm_context
 
 
 class LLMOrchestrator:
@@ -14,12 +14,12 @@ class LLMOrchestrator:
     def __init__(
         self,
         llm_type: LLMType | str = LLMType.NORMAL,
-        provider: ChatOpenAIProvider | None = None,
+        provider: LLMProvider | None = None,
     ):
         self._llm_type = llm_type
-        self._provider = provider or ChatOpenAIProvider(settings.llm)
+        self._provider = provider or LLMProvider(settings.llm)
         # Use tracked invoker for usage statistics
-        self._llm = self._provider.create_tracked_invoker(llm_type, streaming=True)
+        self._llm = self._provider.create_invoker(llm_type, streaming=True)
 
     async def stream(
         self,

@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import settings, LLMType
-from app.llm import ChatOpenAIProvider, llm_context
+from app.llm import LLMProvider, llm_context
 
 from app.database.conversation_repository import ConversationRepository
 
@@ -88,7 +88,7 @@ class ContextCompressor:
         recent_messages_limit: int = 10,
         max_messages_per_compression: int = 200,
         history_text_max_len: int = 8096,
-        provider: ChatOpenAIProvider | None = None,
+        provider: LLMProvider | None = None,
     ):
         """
         Initialize ContextCompressor.
@@ -105,9 +105,9 @@ class ContextCompressor:
         self.max_messages_per_compression = max_messages_per_compression
         self.history_text_max_len = history_text_max_len
 
-        self._provider = provider or ChatOpenAIProvider(settings.llm)
+        self._provider = provider or LLMProvider(settings.llm)
         # Use tracked invoker for usage statistics
-        self._llm = self._provider.create_tracked_invoker(llm_type, temperature=0.3)
+        self._llm = self._provider.create_invoker(llm_type, temperature=0.3)
 
     async def maybe_compress(
         self,
