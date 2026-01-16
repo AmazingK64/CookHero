@@ -50,7 +50,7 @@ class LLMUsageCallbackHandler(BaseCallbackHandler):
 
     def __init__(self):
         super().__init__()
-        self._start_time: Optional[float] = None
+        self._start_time: Dict[str, float] = {}
 
     def on_llm_start(
         self,
@@ -61,7 +61,7 @@ class LLMUsageCallbackHandler(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         """LLM 调用开始时记录时间"""
-        self._start_time = time.time()
+        self._start_time[str(run_id)] = time.time()
 
     def on_llm_end(
         self,
@@ -72,7 +72,7 @@ class LLMUsageCallbackHandler(BaseCallbackHandler):
     ) -> None:
         """LLM 调用完成时捕获 usage 并写入数据库"""
         duration_ms = (
-            int((time.time() - self._start_time) * 1000) if self._start_time else None
+            int((time.time() - self._start_time.pop(str(run_id), time.time())) * 1000)
         )
 
         # 获取上下文
