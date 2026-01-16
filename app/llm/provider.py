@@ -95,6 +95,7 @@ class LLMProvider:
             if max_tokens is not None
             else profile.max_tokens,
             streaming=streaming,
+            stream_usage=True,
             **kwargs,
         )
 
