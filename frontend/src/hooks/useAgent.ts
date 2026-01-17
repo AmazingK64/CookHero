@@ -280,7 +280,7 @@ export function useAgent(token?: string) {
     []
   );
 
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (content: string, selectedTools?: string[]) => {
     if (!content.trim() || isLoading) return;
     if (!token) {
       setError('Please log in to start chatting.');
@@ -379,7 +379,8 @@ export function useAgent(token?: string) {
         message: content,
         session_id: sessionId,
         agent_name: 'default',
-        stream: true
+        stream: true,
+        selected_tools: selectedTools,
       }, token, abortController.signal)) {
 
         if (abortController.signal.aborted) break;

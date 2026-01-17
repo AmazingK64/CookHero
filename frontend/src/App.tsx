@@ -18,6 +18,7 @@ function ChatView() {
   const { id: urlConversationId } = useParams<{ id?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { token } = useAuth();
   const isAgentMode = location.pathname.startsWith('/agent');
 
   // Standard Chat Context
@@ -117,6 +118,7 @@ function ChatView() {
               placeholder="Ask Agent to calculate, analyze, or plan..."
               externalValue={suggestionText}
               onExternalValueConsumed={handleSuggestionConsumed}
+              token={token || undefined}
             />
             <div className="text-center text-xs text-gray-400 mt-2">
               CookHero Agent can make mistakes. Consider checking important information.

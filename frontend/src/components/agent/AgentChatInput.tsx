@@ -5,28 +5,32 @@
 
 import { useState, useRef, useEffect, type KeyboardEvent, type ChangeEvent } from 'react';
 import { SendHorizontal, Square } from 'lucide-react';
+import { ToolSelector } from './ToolSelector';
 
 export interface AgentChatInputProps {
-  onSend: (message: string) => void;
+  onSend: (message: string, selectedTools?: string[]) => void;
   onCancel?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
   placeholder?: string;
   externalValue?: string;
   onExternalValueConsumed?: () => void;
+  token?: string;
 }
 
-export function AgentChatInput({ 
-  onSend, 
+export function AgentChatInput({
+  onSend,
   onCancel,
-  disabled = false, 
+  disabled = false,
   isStreaming = false,
-  placeholder = 'Ask Agent to calculate, analyze, or plan...', 
+  placeholder = 'Ask Agent to calculate, analyze, or plan...',
   externalValue,
   onExternalValueConsumed,
+  token,
 }: AgentChatInputProps) {
   const [input, setInput] = useState('');
   const [isComposing, setIsComposing] = useState(false);
+  const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Handle external value (from SuggestionChip)
@@ -41,9 +45,9 @@ export function AgentChatInput({
 
   const handleSend = () => {
     if (input.trim() && !disabled && !isStreaming) {
-      onSend(input);
+      onSend(input, selectedTools.length > 0 ? selectedTools : undefined);
       setInput('');
-      
+
       // Reset textarea height
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
@@ -64,7 +68,7 @@ export function AgentChatInput({
 
   const handleInput = (e: ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
-    
+
     // Auto-resize textarea
     const textarea = e.target;
     textarea.style.height = 'auto';
@@ -75,6 +79,14 @@ export function AgentChatInput({
 
   return (
     <div className="relative">
+      {/* Tool Selector */}
+      <ToolSelector
+        token={token}
+        selectedTools={selectedTools}
+        onSelectionChange={setSelectedTools}
+        disabled={disabled || isStreaming}
+      />
+
       {/* Input area */}
       <div className="relative flex items-end gap-2 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-purple-500/20 transition-all">
         <textarea

@@ -84,6 +84,19 @@ export interface AgentChatRequest {
   session_id?: string;
   agent_name?: string;
   stream?: boolean;
+  selected_tools?: string[];  // User-selected tools
+}
+
+export interface ToolInfo {
+  name: string;
+  description: string;
+  type: 'builtin' | 'mcp';
+  source?: string;
+}
+
+export interface ToolsListResponse {
+  tools: ToolInfo[];
+  mcp_servers: string[];
 }
 
 export interface AgentSessionResponse {

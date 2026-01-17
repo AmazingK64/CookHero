@@ -13,3 +13,6 @@ export type { AgentMessageBubbleProps } from './AgentMessageBubble';
 
 export { AgentThinkingBlock } from './AgentThinkingBlock';
 export type { AgentThinkingBlockProps, TraceStep } from './AgentThinkingBlock';
+
+export { ToolSelector } from './ToolSelector';
+export type { ToolSelectorProps } from './ToolSelector';

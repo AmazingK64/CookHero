@@ -6,8 +6,25 @@ import type {
   AgentSessionListResponse,
   AgentHistoryResponse,
   SSEEvent,
-  AgentSessionResponse
+  AgentSessionResponse,
+  ToolsListResponse
 } from '../../types';
+
+/**
+ * Get available tools and MCP servers
+ */
+export async function getAvailableTools(token?: string): Promise<ToolsListResponse> {
+  const response = await fetch(`${API_BASE}/agent/tools`, {
+    headers: createAuthHeaders(token),
+  });
+
+  if (!response.ok) {
+    const msg = await parseErrorResponse(response);
+    throw new Error(msg || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+}
 
 /**
  * Send a message to the Agent and receive streaming response
