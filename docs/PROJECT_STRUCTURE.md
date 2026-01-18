@@ -54,13 +54,15 @@ api/
 
 ```
 config/
+├── __init__.py           # 模块初始化和导出
 ├── config_loader.py      # 配置加载器（从 config.yml 和 .env 加载）
 ├── config.py             # 全局配置类（Settings）
 ├── database_config.py    # 数据库配置（PostgreSQL, Redis, Milvus）
 ├── evaluation_config.py  # RAG 评估配置（RAGAS 指标、采样率、告警阈值）
 ├── llm_config.py         # LLM 提供商配置（fast/normal 两层）
+├── mcp_config.py         # MCP 服务器配置（Amap 等）
 ├── rag_config.py         # RAG 管道配置（检索参数、重排序）
-├── vision_config.py      # 视觉模型配置（多模态支持）
+├── vision_config.py      # 视觉模型和图片生成配置
 └── web_search_config.py  # Web 搜索配置（Tavily）
 ```
 
@@ -69,6 +71,18 @@ config/
 - 环境变量注入
 - 配置验证和默认值处理
 - 提供全局 Settings 单例
+
+**配置类**：
+- `Settings`: 全局配置入口
+- `LLMConfig`: LLM 提供商配置（fast/normal 两层）
+- `DatabaseConfig`: 数据库连接配置
+- `RAGConfig`: RAG 管道配置
+- `VisionConfig`: 视觉模型配置
+- `ImageGenerationConfig`: 图片生成配置（DALL-E 3）
+- `ImageStorageConfig`: 图片存储配置（imgbb）
+- `MCPConfig`: MCP 服务器配置
+- `WebSearchConfig`: Web 搜索配置
+- `EvaluationConfig`: RAG 评估配置
 
 ---
 
@@ -328,37 +342,58 @@ security/
 
 ```
 agent/
-├── __init__.py           # 模块初始化和导出（setup_agent_module）
+├── __init__.py           # 模块初始化（setup_agent_module, setup_mcp_servers）
 ├── types.py              # 类型定义（AgentChunk, ToolResult, AgentContext 等）
-├── base.py               # Agent 基类和执行引擎（BaseAgent, DefaultAgent）
 ├── context.py            # 上下文构建器和压缩器
-├── registry.py           # 注册中心（Agent 和 Tool 注册管理）
 ├── service.py            # 业务层（AgentService 主入口）
+├── agents/               # Agent 实现
+│   ├── __init__.py
+│   ├── base.py           # Agent 基类（BaseAgent, ReAct 循环实现）
+│   └── default.py        # 默认 Agent 实现
+├── registry/             # 统一注册中心
+│   ├── __init__.py
+│   └── hub.py            # AgentHub - 统一管理 Agent、Tool、Provider
+├── tools/
+│   ├── __init__.py
+│   ├── base.py           # Tool 基类（BaseTool, MCPTool, ToolExecutor）
+│   ├── common/           # 内置工具
+│   │   ├── __init__.py
+│   │   ├── calculator.py     # 数学计算工具
+│   │   ├── datetime.py       # 日期时间工具
+│   │   ├── websearch.py      # Web 搜索工具（Tavily）
+│   │   └── image_generator.py # 图片生成工具（DALL-E 3 + imgbb）
+│   ├── providers/        # 工具提供者
+│   │   ├── __init__.py
+│   │   ├── local.py      # 本地工具提供者（内置工具）
+│   │   └── mcp.py        # MCP 工具提供者（远程 MCP 服务器）
+│   └── mcp/              # MCP 协议集成
+│       ├── __init__.py
+│       ├── client.py     # MCP HTTP 客户端
+│       └── setup.py      # MCP 服务器注册
 ├── database/
 │   ├── __init__.py
 │   ├── models.py         # ORM 模型（AgentSession, AgentMessage）
 │   └── repository.py     # 数据访问层（CRUD 操作）
-└── tools/
-    ├── __init__.py
-    ├── base.py           # Tool 基类和执行器（BaseTool, ToolExecutor）
-    └── builtin/
-        ├── __init__.py
-        └── common.py     # 内置工具（calculator, datetime, text_processor）
 ```
 
 **职责**：
 - **ReAct 模式执行**：实现 Reasoning + Acting 循环，支持自主推理和工具调用
 - **会话管理**：独立的 Agent 会话系统，与 Conversation 模块分离
-- **工具系统**：可扩展的工具注册和执行框架
+- **统一工具系统**：通过 AgentHub 统一管理本地工具和 MCP 远程工具
+- **MCP 协议支持**：支持连接远程 MCP 服务器动态加载工具
 - **上下文压缩**：自动压缩长对话历史，减少 Token 消耗
 - **流式输出**：支持 SSE 事件流，实时反馈工具调用和结果
 
 **核心类**：
 - `AgentService`: 业务层入口，处理聊天请求和会话管理
 - `BaseAgent`: Agent 基类，实现 ReAct 循环逻辑
-- `AgentRegistry`: 静态注册中心，管理 Agent 和 Tool
+- `AgentHub`: 统一注册中心，管理 Agent、Tool 和 Provider
 - `BaseTool`: 工具基类，定义工具接口规范
+- `MCPTool`: MCP 远程工具封装类
 - `ToolExecutor`: 工具执行器，安全执行工具调用
+- `LocalToolProvider`: 本地（内置）工具提供者
+- `MCPToolProvider`: MCP 远程工具提供者
+- `MCPClient`: MCP 协议 HTTP 客户端
 - `AgentContextBuilder`: 上下文构建器
 - `AgentContextCompressor`: 上下文压缩器
 
@@ -367,7 +402,13 @@ agent/
 |---------|------|------|
 | `calculator` | 数学计算 | `expression` (数学表达式) |
 | `datetime` | 获取日期时间 | `format`, `timezone` |
-| `text_processor` | 文本处理 | `text`, `operation` |
+| `web_search` | Web 搜索 | `query`, `max_results`, `search_depth` |
+| `image_generator` | AI 图片生成 | `prompt`, `size`, `quality`, `style` |
+
+**MCP 集成**：
+- 支持 Amap（高德地图）MCP 服务器
+- 动态加载远程 MCP 服务器提供的工具
+- 工具调用通过 JSON-RPC 协议
 
 **事件类型**（SSE）：
 - `session`: 会话信息
@@ -413,7 +454,8 @@ frontend/
 │   │   │   ├── AgentChatInput.tsx    # Agent 输入框
 │   │   │   ├── AgentChatWindow.tsx   # Agent 聊天窗口
 │   │   │   ├── AgentMessageBubble.tsx # Agent 消息气泡
-│   │   │   └── AgentThinkingBlock.tsx # Agent 思考过程
+│   │   │   ├── AgentThinkingBlock.tsx # Agent 思考过程
+│   │   │   └── ToolSelector.tsx      # 工具选择器（动态加载可用工具）
 │   │   ├── layout/              # 布局组件
 │   │   │   ├── Sidebar.tsx           # 侧边栏（支持 Agent 模式切换）
 │   │   │   └── UserProfileModal.tsx  # 用户资料弹窗
@@ -694,35 +736,42 @@ Python 依赖列表，包含所有后端依赖的精确版本号。
 ### 添加自定义 Agent
 
 1. 创建新的 Agent 类继承 `BaseAgent`
-2. 使用 `@register_agent` 装饰器注册
+2. 在模块初始化时通过 `AgentHub` 注册
 3. 配置 `AgentConfig`（名称、描述、系统提示、可用工具）
 
 ```python
-from app.agent import BaseAgent, register_agent, AgentConfig
+from app.agent.agents.base import BaseAgent
+from app.agent.types import AgentConfig
+from app.agent.registry.hub import agent_hub
 
-@register_agent(AgentConfig(
-    name="cooking_agent",
-    description="专门处理烹饪任务的 Agent",
-    system_prompt="你是一个烹饪专家...",
-    tools=["calculator", "datetime"],
-    max_iterations=10
-))
 class CookingAgent(BaseAgent):
+    """专门处理烹饪任务的 Agent"""
     pass  # 可覆盖 run() 方法自定义逻辑
+
+# 注册 Agent
+agent_hub.register_agent(
+    CookingAgent,
+    AgentConfig(
+        name="cooking_agent",
+        description="专门处理烹饪任务的 Agent",
+        system_prompt="你是一个烹饪专家...",
+        tools=["calculator", "datetime", "web_search"],
+        max_iterations=10
+    )
+)
 ```
 
 ### 添加自定义 Tool
 
 1. 创建新的 Tool 类继承 `BaseTool`
-2. 使用 `@register_tool` 装饰器注册
+2. 通过 `AgentHub` 注册到本地工具提供者
 3. 实现 `execute()` 方法
 
 ```python
 from app.agent.tools.base import BaseTool
 from app.agent.types import ToolResult
-from app.agent.registry import register_tool
+from app.agent.registry.hub import agent_hub
 
-@register_tool
 class RecipeSearchTool(BaseTool):
     name = "recipe_search"
     description = "搜索食谱数据库"
@@ -738,6 +787,29 @@ class RecipeSearchTool(BaseTool):
         # 实现搜索逻辑
         results = await search_recipes(query)
         return ToolResult(success=True, data={"recipes": results})
+
+# 注册到本地工具提供者
+agent_hub.register_tool(RecipeSearchTool(), provider="local")
+```
+
+### 添加 MCP 服务器
+
+1. 在 `config.yml` 中配置 MCP 服务器
+2. 在 `.env` 中设置 API Key
+3. 在 `app/agent/tools/mcp/setup.py` 中添加注册逻辑
+
+```python
+# app/agent/tools/mcp/setup.py
+from app.agent.registry.hub import agent_hub
+
+async def setup_my_mcp_server():
+    mcp_provider = agent_hub.get_provider("mcp")
+    if mcp_provider:
+        await mcp_provider.register_server(
+            name="my_server",
+            endpoint="https://my-mcp-server.com/mcp"
+        )
+        await mcp_provider.load_server_tools("my_server")
 ```
 
 ---
@@ -746,14 +818,15 @@ class RecipeSearchTool(BaseTool):
 
 | 版本 | 日期 | 主要变更 |
 |------|------|---------|
-| v1.6.0 | 2025-01 | 添加 Agent 模块（ReAct 模式、工具系统、会话管理） |
-| v1.5.1 | 2025-01 | LLM 模块重构，添加工具名称追踪，优化流式 usage tracking |
-| v1.5.0 | 2025-01 | 添加 LLM 使用统计功能 |
-| v1.4.0 | 2025-01 | 添加 RAG 评估系统（RAGAS 集成） |
-| v1.3.0 | 2024-12 | 添加安全防护体系（Guardrails、速率限制） |
-| v1.2.0 | 2024-12 | 添加多模态支持（视觉分析） |
-| v1.1.0 | 2024-11 | 添加重排序器、缓存系统 |
-| v1.0.0 | 2024-10 | 初始版本 |
+| v1.7.0 | 2026-01 | 添加 MCP 协议支持、图片生成工具、AgentHub 统一注册、工具提供者架构 |
+| v1.6.0 | 2026-01 | 添加 Agent 模块（ReAct 模式、工具系统、会话管理） |
+| v1.5.1 | 2026-01 | LLM 模块重构，添加工具名称追踪，优化流式 usage tracking |
+| v1.5.0 | 2026-01 | 添加 LLM 使用统计功能 |
+| v1.4.0 | 2026-01 | 添加 RAG 评估系统（RAGAS 集成） |
+| v1.3.0 | 2025-12 | 添加安全防护体系（Guardrails、速率限制） |
+| v1.2.0 | 2025-12 | 添加多模态支持（视觉分析） |
+| v1.1.0 | 2025-12 | 添加重排序器、缓存系统 |
+| v1.0.0 | 2025-12 | 初始版本 |
 
 ---
 
