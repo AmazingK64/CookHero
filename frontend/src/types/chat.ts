@@ -24,7 +24,6 @@ export interface Message {
   // Agent specific fields
   agent_session_id?: string;
   trace?: any[]; // Agent execution trace
-  tool_calls?: any[]; // Tool calls made by agent
 }
 
 /**

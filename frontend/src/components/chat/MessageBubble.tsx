@@ -203,45 +203,46 @@ export function MessageBubble({ message, hasError = false }: MessageBubbleProps)
           </div>
         )}
 
-        {/* Sources (Assistant only) - with type-based styling */}
-        {!isUser && message.sources && message.sources.length > 0 && (
-          <div className="mt-3 w-full">
-            {/* Group sources by type */}
-            {(() => {
-              const ragSources = message.sources.filter(s => s.type === 'rag');
-              const webSources = message.sources.filter(s => s.type === 'web');
-              
-              return (
-                <>
-                  {ragSources.length > 0 && (
-                    <div className="mb-2">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 font-medium">
-                        📚 知识库来源：
-                      </p>
-                      <ul className="space-y-1">
-                        {ragSources.map((source, idx) => (
-                          <SourceItem key={`rag-${idx}`} source={source} index={idx} />
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {webSources.length > 0 && (
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 font-medium">
-                        🌐 网络来源：
-                      </p>
-                      <ul className="space-y-1">
-                        {webSources.map((source, idx) => (
-                          <SourceItem key={`web-${idx}`} source={source} index={idx} />
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-        )}
+          {/* Sources (Assistant only) - with type-based styling */}
+          {!isUser && message.sources && message.sources.length > 0 && (
+            <div className="mt-3 w-full">
+              {/* Group sources by type */}
+              {(() => {
+                const ragSources = message.sources.filter(s => s.type === 'rag');
+                const webSources = message.sources.filter(s => s.type === 'web');
+                
+                return (
+                  <>
+                    {ragSources.length > 0 && (
+                      <div className="mb-2">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 font-medium">
+                          📚 知识库来源：
+                        </p>
+                        <ul className="space-y-1">
+                          {ragSources.map((source, idx) => (
+                            <SourceItem key={`rag-${idx}`} source={source} index={idx} />
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {webSources.length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 font-medium">
+                          🌐 网络来源：
+                        </p>
+                        <ul className="space-y-1">
+                          {webSources.map((source, idx) => (
+                            <SourceItem key={`web-${idx}`} source={source} index={idx} />
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
 
         {/* Timestamp and Duration Stats */}
         <div

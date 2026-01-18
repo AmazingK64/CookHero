@@ -4,8 +4,8 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Clock, Loader2 } from 'lucide-react';
-import type { Message } from '../../types';
+import { Clock, Loader2, BookOpen, Globe, ExternalLink } from 'lucide-react';
+import type { Message, Source } from '../../types';
 import { MarkdownRenderer } from '../chat/MarkdownRenderer';
 import { AgentThinkingBlock, type TraceStep } from './AgentThinkingBlock';
 import { CopyButton } from '../common';
@@ -70,6 +70,128 @@ function parseTrace(trace: any[] | undefined): TraceStep[] {
   });
 }
 
+function getSourceStyle(type: string): { icon: typeof BookOpen; accent: string; label: string } {
+  if (type === 'web') {
+    return {
+      icon: Globe,
+      accent: 'text-blue-500 dark:text-blue-400',
+      label: 'Web Search',
+    };
+  }
+  return {
+    icon: BookOpen,
+    accent: 'text-green-500 dark:text-green-400',
+    label: '知识库',
+  };
+}
+
+function SourceItem({ source }: { source: Source }) {
+  const style = getSourceStyle(source.type);
+  const Icon = style.icon;
+  const isWeb = source.type === 'web';
+
+  return (
+    <li className="flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
+      <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${style.accent}`} />
+      {isWeb && source.url ? (
+        <a
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:text-blue-500 hover:underline transition-colors"
+          title={source.url}
+        >
+          <span className="inline-flex items-center gap-1">
+            {source.info}
+            <ExternalLink className="w-3 h-3 opacity-60" />
+          </span>
+        </a>
+      ) : (
+        <span>{source.info}</span>
+      )}
+    </li>
+  );
+}
+
+function buildSourcesFromTrace(trace: TraceStep[], fallbackSources?: Source[]) {
+  const ragSources: Source[] = [];
+  const webSources: Source[] = [];
+  const seen = new Set<string>();
+  let ragCount = 0;
+  let webCount = 0;
+
+  const addSource = (source: Source, target: Source[]) => {
+    const key = `${source.type}:${source.info}:${source.url ?? ''}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    target.push(source);
+  };
+
+  trace.forEach((step) => {
+    if (step.action !== 'tool_result' || !step.tool_calls?.length) return;
+    const toolName = step.tool_calls[0]?.name;
+    const payload = step.content as Record<string, any> | null;
+    if (!payload || typeof payload !== 'object') return;
+
+    if (toolName === 'knowledge_base_search') {
+      const sources = Array.isArray(payload.sources) ? payload.sources : [];
+      sources.forEach((source) => {
+        if (source && typeof source === 'object') {
+          addSource(
+            {
+              type: source.type || 'rag',
+              info: source.info || 'CookHero 知识库',
+              url: source.url,
+            },
+            ragSources,
+          );
+        }
+      });
+      if (typeof payload.document_count === 'number') {
+        ragCount += payload.document_count;
+      } else {
+        ragCount += sources.length;
+      }
+    }
+
+    if (toolName === 'web_search') {
+      const results = Array.isArray(payload.results) ? payload.results : [];
+      results.forEach((result) => {
+        if (!result || typeof result !== 'object') return;
+        const info = result.title || result.content || result.url || 'Web result';
+        addSource(
+          {
+            type: 'web',
+            info: String(info).trim(),
+            url: result.url,
+          },
+          webSources,
+        );
+      });
+      webCount += results.length;
+    }
+  });
+
+  (fallbackSources || []).forEach((source) => {
+    if (!source) return;
+    if (source.type === 'web') {
+      addSource(source, webSources);
+    } else {
+      addSource(source, ragSources);
+    }
+  });
+
+  if (ragCount === 0) ragCount = ragSources.length;
+  if (webCount === 0) webCount = webSources.length;
+
+  return {
+    ragSources,
+    webSources,
+    ragCount,
+    webCount,
+  };
+}
+
 export function AgentMessageBubble({ message, hasError = false }: AgentMessageBubbleProps) {
   const isUser = message.role === 'user';
   const hasText = !!(message.content && message.content.trim().length > 0);
@@ -120,6 +242,12 @@ export function AgentMessageBubble({ message, hasError = false }: AgentMessageBu
       setElapsedTime(0);
     }
   }, [message.isStreaming, message.thinkingStartTime, message.answerStartTime]);
+
+  const { ragSources, webSources, ragCount, webCount } = buildSourcesFromTrace(
+    traceData,
+    message.sources,
+  );
+  const hasSources = ragSources.length > 0 || webSources.length > 0;
 
   // Format duration for display
   const formatDuration = (ms: number) => {
@@ -198,6 +326,41 @@ export function AgentMessageBubble({ message, hasError = false }: AgentMessageBu
             </span>
           )}
           
+          {!isUser && hasSources && (
+            <div className="relative">
+              <div className="group flex items-center gap-2 rounded-full border border-gray-200/70 dark:border-gray-700/70 bg-white/80 dark:bg-gray-900/60 px-2 py-0.5">
+                {ragSources.length > 0 && (
+                  <div className="relative group/knowledge flex items-center gap-1 text-[11px] text-gray-600 dark:text-gray-300">
+                    <BookOpen className="w-3.5 h-3.5 text-green-500" />
+                    <span>{ragCount}</span>
+                    <div className="absolute left-0 top-full z-20 mt-2 hidden w-64 rounded-lg border border-gray-200/70 dark:border-gray-700/70 bg-white dark:bg-gray-900 p-3 shadow-lg group-hover/knowledge:block">
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">知识库搜索结果</p>
+                      <ul className="space-y-1">
+                        {ragSources.map((source, idx) => (
+                          <SourceItem key={`rag-${idx}`} source={source} />
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+                {webSources.length > 0 && (
+                  <div className="relative group/web flex items-center gap-1 text-[11px] text-gray-600 dark:text-gray-300">
+                    <Globe className="w-3.5 h-3.5 text-blue-500" />
+                    <span>{webCount}</span>
+                    <div className="absolute left-0 top-full z-20 mt-2 hidden w-64 rounded-lg border border-gray-200/70 dark:border-gray-700/70 bg-white dark:bg-gray-900 p-3 shadow-lg group-hover/web:block">
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Web Search 结果</p>
+                      <ul className="space-y-1">
+                        {webSources.map((source, idx) => (
+                          <SourceItem key={`web-${idx}`} source={source} />
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Copy button for assistant */}
           {hasText && !isUser && (
             <CopyButton content={message.content.trim()} size="sm" />

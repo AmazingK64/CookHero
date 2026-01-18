@@ -4,6 +4,7 @@ Agent 模块数据访问仓库
 提供 Agent Session 和 Message 的 CRUD 操作。
 """
 
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -232,7 +233,19 @@ class AgentRepository:
             result = await session.execute(stmt)
             messages = result.scalars().all()
 
-            return [{"role": msg.role, "content": msg.content} for msg in messages]
+            return [{"role": msg.role, "content": msg.content + self._extract_tool_results(msg.trace)} for msg in messages]
+        
+    def _extract_tool_results(self, trace: Optional[list]) -> str:
+        if not trace:
+            return ""
+
+        # json convert
+        tool_results = ""
+        for step in trace:
+            if isinstance(step, dict) and step.get("action") == "tool_result":
+                refs = step.get("content")
+                tool_results += f"{refs}\n"
+        return "\nTool:\n" + tool_results
 
     async def get_message_count(self, session_id: str) -> int:
         """获取 Session 的消息总数。"""
