@@ -45,10 +45,11 @@ CookHero targets kitchen beginners, fitness enthusiasts, health-conscious users,
 - Automatic intent recognition (query, recommendation, chat, etc.)
 - Streaming responses with real-time display
 
-### 2. Hybrid Retrieval System
+### 2. Hybrid Retrieval & Reranking
 - **Vector Retrieval**: Semantic similarity matching (based on Milvus)
 - **BM25 Retrieval**: Keyword exact matching
 - **Metadata Filtering**: Filter by cooking time, difficulty, nutrition, etc.
+- **Smart Reranking**: Use Reranker models (e.g., Qwen3-Reranker) for secondary precision ranking
 - **Multi-level Caching**: Redis + Milvus dual-layer caching for improved response speed
 
 ### 3. Personalized Settings
@@ -57,43 +58,34 @@ CookHero targets kitchen beginners, fitness enthusiasts, health-conscious users,
 - Intelligent parsing of Markdown format recipes
 - User profiling for preference-based recommendations
 - Customizable model response style
+- Support for OpenAI-compatible custom model integration
 
-### 4. Advanced Reranking
-- Use specialized Reranker models for secondary sorting of retrieval results
-- Improve result relevance and accuracy
-- Support for Qwen3-Reranker-8B and other mainstream models
-
-### 5. Web Search Enhancement
-- Integrate Tavily search engine to automatically query online when knowledge base is insufficient
-- Combine real-time information with local knowledge for comprehensive answers
-- LLM-based intelligent search trigger decision
-
-### 6. User System
+### 4. User System
 - User registration/login (JWT authentication)
 - Session management (multi-session isolation, history saving)
 - Dual token mechanism (access token + refresh token)
 
-### 7. Multimodal Support
+### 5. Multimodal Support
 - **Image Recognition**: Upload food/ingredient images for intelligent identification
 - **Intent Understanding**: Combine images and text to understand complete user intent
 - **Multiple Scenarios**: Dish identification, ingredient recognition, cooking guidance, recipe queries
 - **Flexible Integration**: Support for OpenAI-compatible vision model APIs
 
-### 8. RAG Evaluation System
+### 6. RAG Evaluation System
 - **Quality Monitoring**: Automated evaluation based on the RAGAS framework
 - **Core Metrics**: Faithfulness, Answer Relevancy
 - **Async Evaluation**: Background asynchronous execution without affecting response speed
 - **Trend Analysis**: Support for evaluation trend viewing and quality alerts
 - **Data Persistence**: Evaluation results stored in PostgreSQL
 
-### 9. LLM Usage Statistics
+### 7. LLM Usage Statistics
 - **Real-time Monitoring**: Track Token usage for each request
 - **Performance Metrics**: Record response time, thinking time, generation time
 - **Statistical Analysis**: Usage statistics by user, session, and module
 - **Tool Tracking**: Record Agent tool call names
 - **Visualization**: Frontend LLM statistics page
 
-### 10. Security Protection System
+### 8. Security Protection System
 - **Multi-layer Defense**: Input validation → Pattern detection → LLM deep detection
 - **Prompt Injection Protection**: Dual detection mechanism based on rules and AI
 - **Rate Limiting**: Redis sliding window algorithm with endpoint-specific limits
@@ -103,14 +95,20 @@ CookHero targets kitchen beginners, fitness enthusiasts, health-conscious users,
 
 > 📖 For detailed security architecture, see [Security Documentation](SECURITY.md)
 
-### 11. Agent Intelligent Mode (New Feature)
+### 9. Agent Intelligent Mode
 - **ReAct Pattern**: Implements reasoning + action loop for autonomous decision-making and tool invocation
-- **Built-in Tools**: Calculator, datetime, text processing and other practical tools
-- **Extensible Architecture**: Support for custom Agent and Tool registration
+- **Built-in Tools**:
+  - Calculator: Mathematical calculations
+  - DateTime: Get current time, timezone conversion
+  - Web Search: Integrated Tavily search engine for real-time information queries
+  - AI Image Generation: Generate images using DALL-E 3 etc., auto-upload to imgbb for persistence
+- **MCP Protocol Support**: Connect to remote MCP servers for dynamic tool loading (e.g., Amap maps)
+- **Extensible Architecture**: Unified management of Agents, Tools, and Providers via AgentHub
 - **Independent Session Management**: Agent sessions separated from standard conversations
 - **Context Compression**: Automatically compress long conversation history to reduce Token consumption
 - **Real-time Feedback**: SSE event stream for live display of tool calls and results
 - **Execution Tracing**: Complete recording of Agent execution trajectory for debugging and analysis
+- **Tool Selection**: Frontend can dynamically select which tools to use
 
 ---
 
@@ -268,6 +266,16 @@ MILVUS_PASSWORD=your_milvus_password
 # ==================== Web Search ====================
 WEB_SEARCH_API_KEY=your_tavily_api_key
 
+# ==================== MCP Integration ====================
+# Amap (Gaode Maps) MCP Service API Key
+AMAP_API_KEY=your_amap_api_key
+
+# ==================== Image Generation ====================
+# OpenAI-compatible image generation API Key (DALL-E 3, etc.)
+IMAGE_GENERATION_API_KEY=your_openai_api_key
+# imgbb image hosting API Key (for image persistence)
+IMGBB_STORAGE_API_KEY=your_imgbb_api_key
+
 # ==================== Security / Authentication ====================
 JWT_SECRET_KEY=your_secure_jwt_secret_key
 JWT_ALGORITHM=HS256
@@ -353,6 +361,20 @@ evaluation:
   async_mode: true
   sample_rate: 1.0
 
+# MCP configuration
+mcp:
+  amap:
+    enabled: true
+
+# Image generation configuration
+image_generation:
+  enabled: true
+  model: "dall-e-3"
+
+# Image storage configuration (imgbb)
+image_storage:
+  enabled: true
+
 # Database connections
 database:
   postgres:
@@ -397,7 +419,11 @@ app/
 ├── api/v1/endpoints/   # API endpoint definitions
 ├── services/           # Business logic services
 ├── conversation/       # Conversation management module
-├── agent/             # Agent intelligent module (ReAct + Tools)
+├── agent/             # Agent intelligent module
+│   ├── agents/        # Agent implementations (ReAct loop)
+│   ├── tools/         # Tool system (built-in + MCP)
+│   ├── registry/      # AgentHub unified registry
+│   └── database/      # Agent session persistence
 ├── rag/               # RAG pipeline implementation
 ├── security/          # Security protection module
 ├── llm/               # LLM provider
@@ -410,8 +436,9 @@ app/
 - **Add new services**: Implement business logic in `app/services/`
 - **Modify conversation flow**: Adjust conversation management logic in `app/conversation/`
 - **Modify RAG pipeline**: Adjust retrieval process in `app/rag/pipeline/`
-- **Add new Agent**: Inherit `BaseAgent` and use `@register_agent` decorator
-- **Add new Tool**: Inherit `BaseTool` and use `@register_tool` decorator
+- **Add new Agent**: Inherit `BaseAgent` and register via `AgentHub`
+- **Add new Tool**: Inherit `BaseTool` and register via `AgentHub`
+- **Add MCP server**: Configure in `app/agent/tools/mcp/setup.py`
 
 ### Frontend Development
 
@@ -442,6 +469,8 @@ pytest tests/test_guardrails.py -v
 - [x] **Security Protection System**: Input validation, prompt injection protection, rate limiting ✅
 - [x] **LLM Usage Statistics**: Token monitoring, performance analysis page ✅
 - [x] **Agent Intelligent Mode**: ReAct reasoning, tool invocation, session management ✅
+- [x] **MCP Protocol Support**: Remote tool loading, Amap integration ✅
+- [x] **AI Image Generation**: DALL-E 3 integration, imgbb persistent storage ✅
 - [ ] **Voice Interaction**: Voice input queries, voice step narration
 - [ ] **Nutrition Analysis**: Automatic calculation of calories and nutrients
 - [ ] **Community Features**: User sharing, ratings, comments
