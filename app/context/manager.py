@@ -58,7 +58,7 @@ class ContextManager:
         history: List[Dict[str, str]],
         compressed_count: int = 0,
         compressed_summary: Optional[str] = None,
-        extra_system_prompt: Optional[str] = None,
+        extra_prompt: Optional[str] = None,
         user_profile: Optional[str] = None,
         user_instruction: Optional[str] = None,
     ) -> List[BaseMessage]:
@@ -111,8 +111,8 @@ class ContextManager:
                 result.append(AIMessage(content=content))
         
         # Add extra system prompt (e.g., RAG context) at the end
-        if extra_system_prompt:
-            result.append(SystemMessage(content=extra_system_prompt))
+        if extra_prompt:
+            result.append(AIMessage(content=extra_prompt))
         
         return result
 

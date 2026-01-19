@@ -160,22 +160,22 @@ function EmptyState({
             {/* Suggestion Chips */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 w-full max-w-2xl">
                 <SuggestionChip
-                    text="Calculate calories of 20g chicken"
+                    text="计算 20 克鸡肉的卡路里"
                     emoji="🐔"
                     onClick={onSuggestionClick}
                 />
                 <SuggestionChip
-                    text="Convert 2 cups of flour to grams"
+                    text="将 2 杯面粉转换为克"
                     emoji="⚖️"
                     onClick={onSuggestionClick}
                 />
                 <SuggestionChip
-                    text="Plan a weekly meal prep for 2 people"
+                    text="为 2 人制定一周备餐计划"
                     emoji="📅"
                     onClick={onSuggestionClick}
                 />
                 <SuggestionChip
-                    text="Analyze protein content in tofu vs beef"
+                    text="分析豆腐和牛肉的蛋白质含量"
                     emoji="📊"
                     onClick={onSuggestionClick}
                 />

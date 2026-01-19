@@ -2,6 +2,8 @@
  * Chat-related type definitions
  */
 
+import type { ImageData } from './api';
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -80,6 +82,7 @@ export interface Conversation {
 
 export interface AgentChatRequest {
   message: string;
+  images?: ImageData[];  // Images for multimodal understanding
   session_id?: string;
   agent_name?: string;
   stream?: boolean;
@@ -108,6 +111,7 @@ export interface AgentSessionResponse {
   created_at: string;
   updated_at: string;
   message_count: number;
+  last_message_preview?: string | null;
 }
 
 export interface AgentMessageResponse {

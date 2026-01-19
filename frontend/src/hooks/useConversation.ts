@@ -228,25 +228,37 @@ export function useConversation(token?: string) {
           intent: msg.intent,
           thinking: msg.thinking,
         };
-        
+
+        // Extract image URLs from sources for user messages
+        if (msg.role === 'user' && msg.sources && Array.isArray(msg.sources)) {
+          const imageSources = msg.sources.filter(
+            (s: { type?: string }) => s.type === 'image'
+          );
+          if (imageSources.length > 0) {
+            baseMessage.images = imageSources.map(
+              (s: { url?: string; thumb_url?: string }) => s.thumb_url || s.url || ''
+            ).filter(Boolean);
+          }
+        }
+
         // Restore timing information from persisted data
         // We store durations, so we need to reconstruct start/end times for display
         if (msg.thinking_duration_ms !== undefined && msg.thinking_duration_ms !== null) {
           // Use timestamp as a reference point to calculate approximate times
           const msgTime = new Date(msg.timestamp).getTime();
           const totalDuration = (msg.thinking_duration_ms || 0) + (msg.answer_duration_ms || 0);
-          
+
           // Reconstruct timing based on durations
           baseMessage.thinkingStartTime = msgTime - totalDuration;
           baseMessage.thinkingEndTime = baseMessage.thinkingStartTime + msg.thinking_duration_ms;
         }
-        
+
         if (msg.answer_duration_ms !== undefined && msg.answer_duration_ms !== null) {
           const msgTime = new Date(msg.timestamp).getTime();
           baseMessage.answerEndTime = msgTime;
           baseMessage.answerStartTime = msgTime - msg.answer_duration_ms;
         }
-        
+
         return baseMessage;
       });
     },

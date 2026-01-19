@@ -13,6 +13,7 @@ import type {
   Message,
   AgentSessionResponse,
   AgentHistoryResponse,
+  ImageData,
 } from '../types';
 import {
   streamAgentChat,
@@ -261,6 +262,20 @@ export function useAgent(token?: string) {
           trace: msg.trace,
         };
 
+        // Extract image URLs from trace for user messages
+        // (trace is reused to store image URLs for user messages)
+        if (msg.role === 'user' && msg.trace && Array.isArray(msg.trace)) {
+          const imageSources = msg.trace.filter(
+            (s: { type?: string }) => s.type === 'image'
+          );
+          console.log(imageSources);
+          if (imageSources.length > 0) {
+            baseMessage.images = imageSources.map(
+              (s: { url?: string; thumb_url?: string }) => s.thumb_url || s.url || ''
+            ).filter(Boolean);
+          }
+        }
+
         // Add timing information if available (from database)
         // Use type assertion since these fields exist in API response but may not be in type definition
         const msgWithTiming = msg as typeof msg & {
@@ -280,8 +295,9 @@ export function useAgent(token?: string) {
     []
   );
 
-  const sendMessage = useCallback(async (content: string, selectedTools?: string[]) => {
-    if (!content.trim() || isLoading) return;
+  const sendMessage = useCallback(async (content: string, selectedTools?: string[], images?: ImageData[]) => {
+    if (!content.trim() && (!images || images.length === 0)) return;
+    if (isLoading) return;
     if (!token) {
       setError('Please log in to start chatting.');
       return;
@@ -298,6 +314,7 @@ export function useAgent(token?: string) {
       role: 'user',
       content: content.trim(),
       timestamp: new Date(),
+      images: images?.map(img => `data:${img.mime_type};base64,${img.data}`),
     };
 
     const assistantMessageId = generateId();
@@ -341,6 +358,7 @@ export function useAgent(token?: string) {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             message_count: 0,
+            last_message_preview: content.trim().substring(0, 80), // Use user's message as preview
           },
           ...prev,
         ];
@@ -381,6 +399,7 @@ export function useAgent(token?: string) {
         agent_name: 'default',
         stream: true,
         selected_tools: selectedTools,
+        images: images,
       }, token, abortController.signal)) {
 
         if (abortController.signal.aborted) break;
@@ -464,8 +483,19 @@ export function useAgent(token?: string) {
                     streamingCacheRef.current.set(newId, { ...cached, sessionId: newId, tempId: streamingSessionId });
                   }
 
+                  // Update session with proper last_message_preview
                   setSessionsRef.current(prev =>
-                    prev.map(c => (c.id === streamingSessionId ? { ...c, id: newId } : c))
+                    prev.map(c => {
+                      if (c.id === streamingSessionId) {
+                        return {
+                          ...c,
+                          id: newId,
+                          // Keep the last_message_preview from temp session (user's message)
+                          last_message_preview: c.last_message_preview
+                        };
+                      }
+                      return c;
+                    })
                   );
 
                   // Update streamingSessionId first
@@ -477,7 +507,8 @@ export function useAgent(token?: string) {
                     setSessionIdRef.current(newId);
                   }
                 }
-                refreshSessionsRef.current?.(true);
+                // Delay refresh to allow backend to save messages
+                setTimeout(() => refreshSessionsRef.current?.(true), 5);
               }
 
               const cached = streamingCacheRef.current.get(streamingSessionId);

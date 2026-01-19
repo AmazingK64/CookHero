@@ -293,15 +293,37 @@ class ConversationService:
         # Build message content with vision context
         content = ctx.message
 
-        if ctx.vision_context:
-            # Append vision context to the user message so it's part of history
-            content = f"{ctx.message}\n\n[图片分析]\n{ctx.vision_context}"
+        # Build sources with image URLs for persistence
+        sources = None
+        if ctx.images:
+            # Store image URLs in sources field for retrieval after refresh
+            image_sources = []
+            for i, img in enumerate(ctx.images):
+                # Upload to imgbb for persistent URL
+                from app.utils.image_storage import upload_to_imgbb
+                try:
+                    upload_result = await upload_to_imgbb(
+                        img["data"],
+                        img.get("mime_type", "image/jpeg"),
+                    )
+                    if upload_result:
+                        image_sources.append({
+                            "type": "image",
+                            "url": upload_result.get("url"),
+                            "display_url": upload_result.get("display_url"),
+                            "thumb_url": upload_result.get("thumb_url"),
+                        })
+                except Exception as e:
+                    logger.warning(f"Failed to upload image {i} to imgbb: {e}")
+            if image_sources:
+                sources = image_sources
 
         # Save to database
         await conversation_repository.add_message(
             conversation_id=ctx.conv_id,
             role="user",
             content=content,
+            sources=sources,
         )
 
         # Update history with the new message (for current request context)
@@ -325,7 +347,7 @@ class ConversationService:
         # If we have vision context, include it in intent detection
         history_text = ctx.history_text
         if ctx.vision_context:
-            history_text = f"{ctx.vision_context}\n\n{history_text}"
+            history_text = f"{history_text}\n\n{ctx.vision_context}"
         return await self.intent_detector.detect(
             history_text,
             user_id=ctx.user_id,
@@ -666,7 +688,7 @@ class ConversationService:
             ctx.history_dicts,
             compressed_count=ctx.compressed_count,
             compressed_summary=ctx.compressed_summary,
-            extra_system_prompt=context_prompt,
+            extra_prompt=context_prompt,
             user_profile=ctx.user_profile,
             user_instruction=ctx.user_instruction,
         )
@@ -755,42 +777,29 @@ class ConversationService:
         # Add vision context first (if available)
         if vision_context.strip():
             parts.append(
-                "【图片分析结果】\n"
-                "用户上传了图片，以下是图片分析结果：\n"
+                "【图片工具分析结果】\n"
+                "用户上传了图片，以下是工具分析结果，请参考回答：\n"
                 f"{vision_context.strip()}\n"
             )
 
-        parts.append(f"【重写后的检索语句】\n{rewritten_query}\n")
+        if rewritten_query.strip():
+            parts.append(f"【重写后的检索语句】\n{rewritten_query}\n")
 
         # Add RAG context (local knowledge)
         if rag_context.strip():
             parts.append(
-                "【本地知识库内容】\n"
-                "下面是 CookHero 知识库中与当前问题最相关的资料：\n"
+                "【本地知识库工具分析结果】\n"
+                "下面是 CookHero 知识库中与当前问题最相关的资料，请参考回答：\n"
                 f"{rag_context.strip()}\n"
             )
 
         # Add web search context
         if web_context.strip():
             parts.append(
-                "【互联网搜索结果】\n"
+                "【互联网搜索工具分析结果】\n"
                 "下面是从互联网搜索获取的补充信息（请注意甄别信息可靠性）：\n"
                 f"{web_context.strip()}\n"
             )
-
-        if (
-            not rag_context.strip()
-            and not web_context.strip()
-            and not vision_context.strip()
-        ):
-            parts.append("（未找到相关参考内容，请结合通用烹饪知识回答）\n")
-
-        parts.append(
-            "\n请综合以上信息回答用户问题。"
-            "如果用户上传了图片，请结合图片分析结果理解用户意图。"
-            "如果本地知识库与互联网信息有冲突，优先采用本地知识库内容。"
-            "如果信息不足，请坦诚说明并给出合理的建议。"
-        )
 
         return "\n".join(parts)
 

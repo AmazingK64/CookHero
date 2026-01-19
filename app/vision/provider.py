@@ -1,18 +1,17 @@
 """
 Vision Model Provider
-Provides OpenAI-compatible vision model access for multimodal understanding.
+Provides vision model access using the unified LLMProvider infrastructure.
 """
 
 import base64
 import logging
 from dataclasses import dataclass
-from typing import Any, List, Optional, Union
+from typing import List, Optional, Union
 
 from langchain_core.messages import BaseMessage, HumanMessage
-from langchain_openai import ChatOpenAI
 
 from app.config import settings
-from app.config.vision_config import VisionModelConfig
+from app.config.llm_config import VisionLLMConfig
 from app.llm import get_usage_callbacks, llm_context
 
 logger = logging.getLogger(__name__)
@@ -63,50 +62,32 @@ class ImageInput:
 class VisionProvider:
     """
     Provider for vision/multimodal model access.
-    Uses OpenAI-compatible API for vision understanding.
+    Uses the unified LLMProvider infrastructure with llm_type="vision".
     """
 
     MODULE_NAME = "vision_understanding"
 
-    def __init__(self, config: Optional[VisionModelConfig] = None):
+    def __init__(self):
         """
-        Initialize vision provider.
+        Initialize vision provider using LLMProvider.
+        """
+        from app.llm.provider import LLMProvider
 
-        Args:
-            config: Vision model configuration. Uses settings.vision.model if not provided.
-        """
-        self._config = config or settings.vision.model
-        self._llm: Optional[ChatOpenAI] = None
+        self._provider = LLMProvider(settings.llm)
+        self._invoker = self._provider.create_invoker(llm_type="vision")
         self._callbacks = get_usage_callbacks()
 
     @property
-    def config(self) -> VisionModelConfig:
-        """Get configuration."""
-        return self._config
+    def config(self) -> VisionLLMConfig:
+        """Get vision configuration."""
+        profile = self._provider.get_profile("vision")
+        # Cast to VisionLLMConfig since we know it's the vision profile
+        return profile  # type: ignore
 
     @property
     def is_enabled(self) -> bool:
         """Check if vision is enabled."""
-        return self._config.enabled and bool(self._config.api_key)
-
-    def _get_llm(self) -> ChatOpenAI:
-        """Get or create the vision LLM instance."""
-        if self._llm is None:
-            if not self._config.api_key:
-                raise ValueError(
-                    "Vision API key is not configured. Set VISION_API_KEY or LLM_API_KEY in .env"
-                )
-
-            # Vision 使用独立配置，直接创建 ChatOpenAI
-            self._llm = ChatOpenAI(
-                model=self._config.model_name,
-                api_key=self._config.api_key,  # type: ignore
-                base_url=self._config.base_url,
-                temperature=self._config.temperature,
-                max_completion_tokens=self._config.max_tokens,
-                timeout=self._config.request_timeout,
-            )
-        return self._llm
+        return bool(self.config.api_key)
 
     def build_multimodal_message(
         self,
@@ -162,8 +143,6 @@ class VisionProvider:
         if not images:
             raise ValueError("At least one image is required")
 
-        llm = self._get_llm()
-
         # Build messages
         messages: List[BaseMessage] = []
 
@@ -179,14 +158,13 @@ class VisionProvider:
 
         logger.info(
             f"Vision analysis: text='{text[:50]}...', images={len(images)}, "
-            f"model={self._config.model_name}"
+            f"model={self.config.model_names[0]}"
         )
 
         try:
-            # Hint the model to return structured JSON when supported
             # Use llm_context for usage tracking
             with llm_context(self.MODULE_NAME, user_id, conversation_id):
-                response = await llm.with_config(callbacks=self._callbacks).ainvoke(
+                response = await self._invoker.ainvoke(
                     messages,
                     response_format={
                         "type": "json_object"
@@ -212,19 +190,21 @@ class VisionProvider:
         Returns:
             Tuple of (is_valid, error_message)
         """
+        config = self.config
+
         # Check format
-        if mime_type not in self._config.supported_formats:
+        if mime_type not in config.supported_formats:
             return (
                 False,
-                f"Unsupported image format: {mime_type}. Supported: {self._config.supported_formats}",
+                f"Unsupported image format: {mime_type}. Supported: {config.supported_formats}",
             )
 
         # Check size
-        max_size_bytes = self._config.max_image_size_mb * 1024 * 1024
+        max_size_bytes = config.max_image_size_mb * 1024 * 1024
         if size_bytes > max_size_bytes:
             return (
                 False,
-                f"Image too large: {size_bytes / 1024 / 1024:.2f}MB. Maximum: {self._config.max_image_size_mb}MB",
+                f"Image too large: {size_bytes / 1024 / 1024:.2f}MB. Maximum: {config.max_image_size_mb}MB",
             )
 
         return True, None

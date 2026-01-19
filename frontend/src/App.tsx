@@ -191,15 +191,15 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   // Unified State based on Mode
   const conversationId = isAgentMode ? agentSessionId : chatConversationId;
   // Map Agent sessions to ConversationSummary format for Sidebar
-  const conversations = isAgentMode 
+  const conversations = isAgentMode
     ? agentSessions.map(s => ({
         id: s.id,
-        title: s.title || `Session ${s.id.slice(0, 8)}...`,
+        title: s.title,
         created_at: s.created_at,
         updated_at: s.updated_at,
         message_count: s.message_count,
-        last_message_preview: 'Agent Session'
-    })) 
+        last_message_preview: s.last_message_preview
+    }))
     : chatConversations;
 
   const totalConversations = isAgentMode ? agentTotalSessions : chatTotalConversations;

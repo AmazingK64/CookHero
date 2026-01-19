@@ -16,6 +16,26 @@ export interface AgentMessageBubbleProps {
 }
 
 /**
+ * Extract image URLs from trace data for user messages
+ */
+function extractImagesFromTrace(trace: any[] | undefined): string[] {
+  if (!trace || trace.length === 0) return [];
+
+  const images: string[] = [];
+
+  for (const item of trace) {
+    if (typeof item === 'object' && item !== null) {
+      // Check if this is an image source entry
+      if (item.type === 'image' && item.display_url) {
+        images.push(item.display_url);
+      }
+    }
+  }
+
+  return images;
+}
+
+/**
  * Parse trace data from message - handles both string[] and object[]
  */
 function parseTrace(trace: any[] | undefined): TraceStep[] {
@@ -195,12 +215,20 @@ function buildSourcesFromTrace(trace: TraceStep[], fallbackSources?: Source[]) {
 export function AgentMessageBubble({ message, hasError = false }: AgentMessageBubbleProps) {
   const isUser = message.role === 'user';
   const hasText = !!(message.content && message.content.trim().length > 0);
-  
+
   // Parse trace data - use message.trace if available, otherwise fall back to message.thinking
   const traceData = parseTrace(message.trace || message.thinking);
   const hasTrace = traceData.length > 0;
   const isThinkingPhase = !isUser && !!message.isStreaming && !hasText;
   const showThinkingBlock = !isUser && (hasTrace || isThinkingPhase);
+
+  // Extract images from trace for user messages
+  // Priority: trace URLs (after refresh) > message.images (just sent with base64)
+  const tracedImages = isUser ? extractImagesFromTrace(message.trace) : [];
+  const userImages = isUser
+    ? (tracedImages.length > 0 ? tracedImages : message.images || [])
+    : [];
+  const hasUserImages = userImages.length > 0;
 
   // Handle both timestamp-based timing and duration-based timing
   const thinkingDuration = message.thinkingStartTime && message.thinkingEndTime
@@ -283,6 +311,19 @@ export function AgentMessageBubble({ message, hasError = false }: AgentMessageBu
                 : 'prose prose-sm dark:prose-invert max-w-none text-gray-800 dark:text-gray-100 px-0 py-0'
             }`}
           >
+            {/* User Images (displayed before text) */}
+            {isUser && hasUserImages && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {userImages.map((imgUrl, idx) => (
+                  <img
+                    key={idx}
+                    src={imgUrl}
+                    alt={`Uploaded image ${idx + 1}`}
+                    className="max-w-[200px] max-h-[200px] rounded-lg object-cover"
+                  />
+                ))}
+              </div>
+            )}
             <MarkdownRenderer content={message.content.trim()} />
           </div>
         )}
