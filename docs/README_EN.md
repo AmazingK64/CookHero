@@ -97,6 +97,8 @@ CookHero targets kitchen beginners, fitness enthusiasts, health-conscious users,
 
 ### 9. Agent Intelligent Mode
 - **ReAct Pattern**: Implements reasoning + action loop for autonomous decision-making and tool invocation
+- **Multimodal Support**: Upload images (up to 4, max 10MB each), automatically persisted to imgbb storage
+- **User Profile Integration**: Automatically reads user profile and long-term instructions for personalized service
 - **Built-in Tools**:
   - Calculator: Mathematical calculations
   - DateTime: Get current time, timezone conversion
@@ -104,7 +106,6 @@ CookHero targets kitchen beginners, fitness enthusiasts, health-conscious users,
   - AI Image Generation: Generate images using DALL-E 3 etc., auto-upload to imgbb for persistence
 - **MCP Protocol Support**: Connect to remote MCP servers for dynamic tool loading (e.g., Amap maps)
 - **Extensible Architecture**: Unified management of Agents, Tools, and Providers via AgentHub
-- **Independent Session Management**: Agent sessions separated from standard conversations
 - **Context Compression**: Automatically compress long conversation history to reduce Token consumption
 - **Real-time Feedback**: SSE event stream for live display of tool calls and results
 - **Execution Tracing**: Complete recording of Agent execution trajectory for debugging and analysis
@@ -305,10 +306,11 @@ PROMPT_GUARD_ENABLED=true
 `config.yml` contains the core configuration of the application:
 
 ```yaml
-# LLM Provider Configuration (Layered: fast / normal)
+# LLM Provider Configuration (Layered: fast / normal / vision)
 llm:
   fast:    # Fast models (low latency)
   normal:  # Standard models (high quality)
+  vision:  # Vision models (multimodal)
 
 # Data paths
 paths:

@@ -37,7 +37,7 @@ from app.config.database_config import (
     RedisConfig,
     MilvusConfig,
 )
-from app.config.llm_config import LLMConfig, LLMType, LLMProfileConfig
+from app.config.llm_config import LLMConfig, LLMType, LLMProfileConfig, VisionLLMConfig
 from app.config.rag_config import (
     RAGConfig,
     PathsConfig,
@@ -50,7 +50,7 @@ from app.config.rag_config import (
     HowToCookConfig,
 )
 from app.config.web_search_config import WebSearchConfig
-from app.config.vision_config import VisionConfig, VisionModelConfig, ImageGenerationConfig, ImageStorageConfig
+from app.config.vision_config import VisionConfig, ImageGenerationConfig, ImageStorageConfig
 from app.config.mcp_config import MCPConfig, MCPServerConfig
 
 __all__ = [
@@ -67,6 +67,7 @@ __all__ = [
     "LLMConfig",
     "LLMType",
     "LLMProfileConfig",
+    "VisionLLMConfig",
     # RAG configuration classes
     "RAGConfig",
     "PathsConfig",
@@ -81,7 +82,6 @@ __all__ = [
     "WebSearchConfig",
     # Vision configuration
     "VisionConfig",
-    "VisionModelConfig",
     # MCP configuration
     "MCPConfig",
     "MCPServerConfig",

@@ -8,12 +8,10 @@
 """
 
 import logging
-from typing import Optional
-
-import httpx
 
 from app.agent.tools.base import BaseTool
 from app.agent.types import ToolResult
+from app.utils.image_storage import upload_to_imgbb
 
 logger = logging.getLogger(__name__)
 
@@ -57,58 +55,6 @@ class ImageGeneratorTool(BaseTool):
         },
         "required": ["prompt"],
     }
-
-    async def _upload_to_imgbb(self, image_url: str) -> Optional[dict]:
-        """
-        将图片 URL 上传到 imgbb 进行持久化存储。
-
-        Args:
-            image_url: 原始图片 URL
-
-        Returns:
-            包含 imgbb 上传结果的字典，失败时返回 None
-        """
-        from app.config import settings
-
-        storage_config = settings.image_storage
-        if not storage_config.enabled:
-            logger.info("Image storage is disabled, skipping upload")
-            return None
-
-        if not storage_config.api_key:
-            logger.warning("imgbb API key is not configured, skipping upload")
-            return None
-
-        try:
-            params = {
-                "key": storage_config.api_key,
-                "image": image_url,
-            }
-            if storage_config.expiration:
-                params["expiration"] = str(storage_config.expiration)
-
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    storage_config.upload_url,
-                    data=params,
-                )
-                response.raise_for_status()
-                result = response.json()
-
-                if result.get("success"):
-                    return {
-                        "url": result["data"]["url"],
-                        "display_url": result["data"]["display_url"],
-                        "delete_url": result["data"]["delete_url"],
-                        "thumb_url": result["data"].get("thumb", {}).get("url"),
-                    }
-                else:
-                    logger.error(f"imgbb upload failed: {result}")
-                    return None
-
-        except Exception as e:
-            logger.exception(f"Failed to upload image to imgbb: {e}")
-            return None
 
     async def execute(
         self,
@@ -171,7 +117,7 @@ class ImageGeneratorTool(BaseTool):
                 )
 
             # Upload to imgbb for persistent storage
-            storage_result = await self._upload_to_imgbb(original_url)
+            storage_result = await upload_to_imgbb(original_url)
 
             if storage_result:
                 # Use imgbb URL as the final URL

@@ -25,7 +25,7 @@ from app.config.database_config import (
 from app.config.llm_config import LLMConfig
 from app.config.rag_config import RAGConfig
 from app.config.web_search_config import WebSearchConfig
-from app.config.vision_config import VisionConfig, VisionModelConfig, ImageGenerationConfig, ImageStorageConfig
+from app.config.vision_config import VisionConfig, ImageGenerationConfig, ImageStorageConfig
 from app.config.evaluation_config import EvaluationConfig, AlertThresholds
 from app.config.mcp_config import MCPConfig, MCPServerConfig
 
@@ -47,10 +47,11 @@ def _load_config_data() -> Dict[str, Any]:
 def load_llm_config() -> LLMConfig:
     """
     Load global LLM provider configuration.
-    
+
     Environment variables:
     - LLM_API_KEY: Normal LLM API key
     - FAST_LLM_API_KEY / LLM_FAST_API_KEY: Fast LLM API key (fallback to LLM_API_KEY)
+    - VISION_API_KEY: Vision LLM API key (fallback to LLM_API_KEY)
     """
     config_data = _load_config_data()
     llm_root = config_data.get("llm", {}) or {}
@@ -59,9 +60,11 @@ def load_llm_config() -> LLMConfig:
     # Inject API keys from environment (with inheritance for convenience)
     normal_api_key = os.getenv("LLM_API_KEY")
     fast_api_key = os.getenv("FAST_LLM_API_KEY") or os.getenv("LLM_FAST_API_KEY")
+    vision_api_key = os.getenv("VISION_API_KEY") or os.getenv("LLM_API_KEY")
 
     normal_data = dict(llm_data.get("normal", {}) or {})
     fast_data = dict(llm_data.get("fast", {}) or {})
+    vision_data = dict(llm_data.get("vision", {}) or {})
 
     if normal_api_key:
         normal_data["api_key"] = normal_api_key
@@ -69,8 +72,12 @@ def load_llm_config() -> LLMConfig:
     if fast_api_key:
         fast_data["api_key"] = fast_api_key
 
+    if vision_api_key:
+        vision_data["api_key"] = vision_api_key
+
     llm_data["normal"] = normal_data
     llm_data["fast"] = fast_data
+    llm_data["vision"] = vision_data
 
     return LLMConfig.model_validate(llm_data)
 
@@ -189,22 +196,20 @@ def load_web_search_config() -> WebSearchConfig:
 
 def load_vision_config() -> VisionConfig:
     """
-    Load vision/multimodal configuration from YAML + environment variables.
-    
-    Environment variables:
-    - VISION_API_KEY: Vision model API key (falls back to LLM_API_KEY)
+    Load vision configuration from YAML (domain keywords only).
+
+    Note: Vision model configuration is now handled by LLMConfig.vision.
+    This function only loads domain-specific settings like food_related_keywords.
     """
     config_data = _load_config_data()
     vision_data = dict(config_data.get("vision", {}) or {})
-    model_data = dict(vision_data.get("model", {}) or {})
-    
-    # Load API key from environment with fallback
-    api_key = os.getenv("VISION_API_KEY") or os.getenv("LLM_API_KEY")
-    if api_key:
-        model_data["api_key"] = api_key
-    
-    vision_data["model"] = model_data
-    return VisionConfig.model_validate(vision_data)
+
+    # Only keep domain-related settings, model config is now in LLMConfig
+    domain_data = {}
+    if "food_related_keywords" in vision_data:
+        domain_data["food_related_keywords"] = vision_data["food_related_keywords"]
+
+    return VisionConfig.model_validate(domain_data)
 
 
 def load_evaluation_config() -> EvaluationConfig:

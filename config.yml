@@ -35,9 +35,9 @@ llm:
   # Fast tier - Low latency models for auxiliary tasks
   fast:
     model_names:
-      # - "XiaomiMiMo/MiMo-V2-Flash"
-      - "deepseek-ai/DeepSeek-V3.2"
-      - "Qwen/Qwen3-Coder-480B-A35B-Instruct"
+      - "XiaomiMiMo/MiMo-V2-Flash"
+      # - "deepseek-ai/DeepSeek-V3.2"
+      - "Qwen/Qwen3-VL-8B-Instruct"
       - "Qwen/Qwen3-235B-A22B-Instruct-2507"
       - "Qwen/Qwen3-VL-235B-A22B-Instruct"
     base_url: "https://api-inference.modelscope.cn/v1"

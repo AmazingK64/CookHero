@@ -74,7 +74,7 @@ config/
 
 **配置类**：
 - `Settings`: 全局配置入口
-- `LLMConfig`: LLM 提供商配置（fast/normal 两层）
+- `LLMConfig`: LLM 提供商配置（fast/normal/vision 三层）
 - `DatabaseConfig`: 数据库连接配置
 - `RAGConfig`: RAG 管道配置
 - `VisionConfig`: 视觉模型配置
@@ -287,13 +287,15 @@ tools/
 
 ```
 utils/
-└── structured_json.py # JSON 解析和验证工具
+├── structured_json.py # JSON 解析和验证工具
+└── image_storage.py   # 图片存储工具（imgbb 上传）
 ```
 
 **职责**：
 - 通用工具函数
 - 数据格式化和验证
 - 结构化 JSON 处理
+- 图片持久化存储（imgbb 集成）
 
 ---
 
@@ -379,6 +381,8 @@ agent/
 **职责**：
 - **ReAct 模式执行**：实现 Reasoning + Acting 循环，支持自主推理和工具调用
 - **会话管理**：独立的 Agent 会话系统，与 Conversation 模块分离
+- **多模态支持**：支持接收和处理图片（最多 4 张，每张最大 10MB），自动上传到 imgbb 持久化
+- **用户画像集成**：自动读取用户画像和长期指令，提供个性化服务
 - **统一工具系统**：通过 AgentHub 统一管理本地工具和 MCP 远程工具
 - **MCP 协议支持**：支持连接远程 MCP 服务器动态加载工具
 - **上下文压缩**：自动压缩长对话历史，减少 Token 消耗
@@ -689,12 +693,15 @@ Python 依赖列表，包含所有后端依赖的精确版本号。
 
 ### Agent 对话流程
 
-1. **用户请求**：前端发送请求到 `/api/v1/agent/chat`
-2. **API 层**：`agent.py` 接收请求，验证身份
+1. **用户请求**：前端发送请求到 `/api/v1/agent/chat`（可包含图片）
+2. **API 层**：`agent.py` 接收请求，验证身份和图片格式/大小
 3. **安全检查**：`dependencies.py` 统一安全检查
 4. **会话管理**：`AgentService.chat()` 获取或创建 Session
 5. **消息保存**：保存用户消息到数据库
 6. **上下文构建**：`AgentContextBuilder` 构建完整上下文
+   - 读取用户画像和长期指令
+   - 处理图片（如有）：上传到 imgbb 获取持久化 URL
+   - 构建包含用户画像、历史消息和图片的完整上下文
 7. **Agent 执行**：`BaseAgent.run()` 执行 ReAct 循环
    - 调用 LLM 判断是否需要工具
    - 如需工具，执行 `ToolExecutor.execute()`
@@ -818,6 +825,7 @@ async def setup_my_mcp_server():
 
 | 版本 | 日期 | 主要变更 |
 |------|------|---------|
+| v1.8.0 | 2026-01 | Agent 多模态支持（图片上传、imgbb 持久化）、用户画像集成、LLM 配置三层化 |
 | v1.7.0 | 2026-01 | 添加 MCP 协议支持、图片生成工具、AgentHub 统一注册、工具提供者架构 |
 | v1.6.0 | 2026-01 | 添加 Agent 模块（ReAct 模式、工具系统、会话管理） |
 | v1.5.1 | 2026-01 | LLM 模块重构，添加工具名称追踪，优化流式 usage tracking |

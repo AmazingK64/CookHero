@@ -67,6 +67,7 @@ class LLMProvider:
         streaming: bool = False,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        timeout: int | None = None,
         **kwargs: Any,
     ) -> ChatOpenAI:
         """
@@ -76,28 +77,38 @@ class LLMProvider:
         推荐使用 create_invoker() 方法获取带 tracking 的调用器
 
         Args:
-            llm_type: LLM 类型 (fast/normal)
+            llm_type: LLM 类型 (fast/normal/vision)
             streaming: 是否启用流式输出
             temperature: 温度参数（可选覆盖配置）
             max_tokens: 最大 tokens（可选覆盖配置）
+            timeout: 请求超时时间（可选，vision profile 默认 120s）
             **kwargs: 其他 ChatOpenAI 参数
 
         Returns:
             ChatOpenAI 实例
         """
         profile = self.get_profile(llm_type)
-        return ChatOpenAI(
-            model=profile.pick_default_model(),
-            api_key=profile.api_key,  # type: ignore
-            base_url=profile.base_url,
-            temperature=temperature if temperature is not None else profile.temperature,
-            max_completion_tokens=max_tokens
-            if max_tokens is not None
-            else profile.max_tokens,
-            streaming=streaming,
-            stream_usage=True,
+
+        # Handle timeout - use profile's request_timeout if available
+        effective_timeout = timeout
+        if effective_timeout is None and hasattr(profile, "request_timeout"):
+            effective_timeout = profile.request_timeout # type: ignore
+
+        llm_kwargs = {
+            "model": profile.pick_default_model(),
+            "api_key": profile.api_key,
+            "base_url": profile.base_url,
+            "temperature": temperature if temperature is not None else profile.temperature,
+            "max_completion_tokens": max_tokens if max_tokens is not None else profile.max_tokens,
+            "streaming": streaming,
+            "stream_usage": True,
             **kwargs,
-        )
+        }
+
+        if effective_timeout is not None:
+            llm_kwargs["timeout"] = effective_timeout
+
+        return ChatOpenAI(**llm_kwargs)  # type: ignore
 
     def create_invoker(
         self,
