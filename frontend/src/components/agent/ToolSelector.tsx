@@ -45,10 +45,10 @@ const ToolChip = memo(function ToolChip({
 
   // Colors based on server type
   const isLocal = serverType === 'local';
-  const selectedBgClass = isLocal ? 'bg-purple-500' : 'bg-blue-500';
-  const hoverTextClass = isLocal ? 'hover:text-purple-600 dark:hover:text-purple-400' : 'hover:text-blue-600 dark:hover:text-blue-400';
-  const infoHoverClass = isLocal ? 'hover:text-purple-500' : 'hover:text-blue-500';
-  const infoSelectedClass = isLocal ? 'text-purple-200' : 'text-blue-200';
+  const selectedBgClass = isLocal ? 'bg-orange-500' : 'bg-blue-500';
+  const hoverTextClass = isLocal ? 'hover:text-orange-600 dark:hover:text-orange-400' : 'hover:text-blue-600 dark:hover:text-blue-400';
+  const infoHoverClass = isLocal ? 'hover:text-orange-500' : 'hover:text-blue-500';
+  const infoSelectedClass = isLocal ? 'text-orange-200' : 'text-blue-200';
 
   return (
     <div
@@ -124,9 +124,9 @@ const ServerCard = memo(function ServerCard({
 
   // Choose icon and colors based on server type
   const ServerIcon = server.type === 'local' ? Wrench : Globe;
-  const iconColorClass = server.type === 'local' ? 'text-purple-500' : 'text-blue-500';
+  const iconColorClass = server.type === 'local' ? 'text-orange-500' : 'text-blue-500';
   const buttonColorClass = server.type === 'local'
-    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50'
+    ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-900/50'
     : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50';
 
   const handleShowInfo = (toolName: string) => {
@@ -326,12 +326,12 @@ export function ToolSelector({
             ${isLoading
               ? 'text-gray-400 cursor-not-allowed'
               : isToolsExpanded
-                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200'
-                : 'text-gray-700 dark:text-gray-300 hover:bg-purple-50 dark:hover:bg-purple-900/20'
+                ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-orange-50 dark:hover:bg-orange-900/20'
             }
           `}
         >
-          <Wrench className="w-4 h-4 text-purple-500" />
+          <Wrench className="w-4 h-4 text-orange-500" />
           <span className="font-medium">Tools</span>
           <span className="text-xs text-gray-500 dark:text-gray-400">
             ({builtinSelectedCount}/{builtinTools.length})

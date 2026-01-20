@@ -122,18 +122,36 @@ function EmptyState({
 }) {
     return (
         <div className="flex flex-col items-center justify-center h-full w-full text-gray-500 dark:text-gray-400 animate-in fade-in duration-500 overflow-x-hidden px-4 box-border">
-            <section className="relative flex-1 flex flex-col items-center justify-center overflow-hidden">
+            {/* <section className="relative flex-1 flex flex-col items-center justify-center overflow-hidden">
                 <div className="flex items-center gap-4">
-                    <div className="w-20 h-20 bg-purple-100 dark:bg-purple-900/30 rounded-2xl flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0">
-                        <Bot className="w-10 h-10" />
+                    <div className="w-20 h-20 bg-orange-100 dark:bg-orange-900/30 rounded-2xl flex items-center justify-center text-orange-600 dark:text-orange-400 shrink-0 overflow-hidden">
+                        <img src="/image.png" alt="CookHero Logo" className="w-full h-full object-contain p-2" />
+                    </div>
+                    <div className="w-100 h-48 max-w-5xl mx-auto flex items-center justify-center">
+                        <img
+                            src="/image.png"
+                            alt="CookHero Logo"
+                            className="w-full max-w-4xl object-contain transition-all duration-500 group-hover:scale-105"
+                        />
                     </div>
                     <div>
-                        <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600 dark:from-purple-400 dark:to-indigo-400">
+                        <h2 className="text-3xl font-bold text-orange-600 dark:text-orange-400">
                             Your Personal Agent
                         </h2>
                         <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mt-1">
                             Calculate, analyze, and plan with intelligent tools
                         </p>
+                    </div>
+                </div>
+            </section> */}
+            <section className="relative flex-1 flex flex-col items-center justify-center overflow-hidden">
+                <div className="relative group w-full px-4">
+                    <div className="w-100 h-48 max-w-5xl mx-auto flex items-center justify-center">
+                        <img
+                            src="/image.png"
+                            alt="CookHero Logo"
+                            className="w-full max-w-4xl object-contain transition-all duration-500 group-hover:scale-105"
+                        />
                     </div>
                 </div>
             </section>
@@ -197,11 +215,11 @@ function FeatureCard({
     description: string;
 }) {
     return (
-        <div className="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-center shadow-sm">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center mx-auto mb-3 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+        <div className="p-5 bg-white dark:bg-gray-800 border border-gray-200/60 dark:border-gray-700/60 rounded-xl text-center shadow-sm hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300">
+            <div className="w-11 h-11 rounded-lg flex items-center justify-center mx-auto mb-3 bg-gradient-to-br from-indigo-100 to-indigo-50 dark:from-indigo-900/40 dark:to-indigo-900/20 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
                 {icon}
             </div>
-            <h3 className="font-medium text-gray-800 dark:text-gray-100 mb-1">
+            <h3 className="font-semibold text-gray-800 dark:text-gray-100 mb-1.5">
                 {title}
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">{description}</p>
@@ -223,13 +241,13 @@ function SuggestionChip({
 }) {
     return (
         <button
-            className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-left hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-md transition-all duration-200 text-gray-700 dark:text-gray-300 group"
+            className="flex items-center gap-3 px-4 py-3.5 bg-white dark:bg-gray-800 border border-gray-200/60 dark:border-gray-700/60 rounded-xl text-sm text-left hover:border-indigo-400 dark:hover:border-indigo-600 hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5 transition-all duration-300 text-gray-700 dark:text-gray-300 group"
             onClick={() => onClick?.(text)}
         >
-            <span className="text-xl group-hover:scale-110 transition-transform">
+            <span className="text-xl group-hover:scale-125 group-hover:rotate-3 transition-all duration-300">
                 {emoji}
             </span>
-            <span>{text}</span>
+            <span className="group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{text}</span>
         </button>
     );
 }
@@ -240,7 +258,7 @@ function SuggestionChip({
 function LoadingIndicator() {
     return (
         <div className="flex gap-4 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-400 to-purple-500 flex items-center justify-center shrink-0 shadow-sm">
+            <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center shrink-0 shadow-sm">
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             </div>
             <div className="space-y-2 pt-2">

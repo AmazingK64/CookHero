@@ -318,11 +318,8 @@ function SidebarHeader({
                     {onToggleAgentMode && (
                         <button
                             onClick={onToggleAgentMode}
-                            className={`ml-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border transition-colors ${
-                                isAgentMode 
-                                    ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'
-                                    : 'bg-orange-100 text-orange-600 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800 hover:bg-orange-200 dark:hover:bg-orange-800'
-                            }`}
+                            className={`ml-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border transition-colors bg-orange-100 text-orange-600 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800 hover:bg-orange-200 dark:hover:bg-orange-800
+                            `}
                             title={isAgentMode ? "Switch to standard chat" : "Switch to Agent mode"}
                         >
                             {isAgentMode ? <Bot className="w-3 h-3" /> : <MessageSquare className="w-3 h-3" />}
@@ -340,11 +337,8 @@ function SidebarHeader({
             </div>
             <button
                 onClick={onNewChat}
-                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-xl text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md ${
-                    isAgentMode 
-                        ? 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700' 
-                        : 'bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600'
-                }`}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white rounded-xl text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600
+                `}
             >
                 <Plus className="w-4 h-4" />
                 {isAgentMode ? 'New Agent Session' : 'New Chat Session'}
@@ -440,8 +434,8 @@ function ConversationItem({
 
     if (isEditing) {
         return (
-            <div className={`flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-gray-800 border ${isAgentMode ? 'border-purple-400 dark:border-purple-500' : 'border-orange-400 dark:border-orange-500'}`}>
-                <MessageSquare className={`w-4 h-4 shrink-0 ${isAgentMode ? 'text-purple-500' : 'text-orange-500'}`} />
+            <div className={`flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-gray-800 border ${isAgentMode ? 'border-orange-400 dark:border-orange-500' : 'border-orange-400 dark:border-orange-500'}`}>
+                <MessageSquare className={`w-4 h-4 shrink-0 ${isAgentMode ? 'text-orange-500' : 'text-orange-500'}`} />
                 <input
                     ref={editInputRef}
                     type="text"
@@ -486,7 +480,7 @@ function ConversationItem({
         `}
             >
                 <MessageSquare
-                    className={`w-4 h-4 shrink-0 ${isActive ? (isAgentMode ? 'text-purple-500' : 'text-orange-500') : ''}`}
+                    className={`w-4 h-4 shrink-0 ${isActive ? (isAgentMode ? 'text-orange-500' : 'text-orange-500') : ''}`}
                 />
                 <span className="truncate flex-1">{displayTitle}</span>
 

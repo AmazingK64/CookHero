@@ -347,7 +347,7 @@ export function AgentMessageBubble({ message, hasError = false }: AgentMessageBu
           
           {/* Real-time elapsed time during streaming */}
           {!isUser && message.isStreaming && elapsedTime > 0 && (
-            <span className="inline-flex items-center gap-1 text-purple-500 dark:text-purple-400">
+            <span className="inline-flex items-center gap-1 text-orange-500 dark:text-orange-400">
               <Loader2 className="w-3 h-3 animate-spin" />
               {formatDuration(elapsedTime)}
             </span>

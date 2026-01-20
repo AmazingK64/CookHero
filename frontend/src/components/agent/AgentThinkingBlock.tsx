@@ -75,7 +75,7 @@ export function AgentThinkingBlock({ trace, isThinking, thinkingDuration, hasErr
         >
           <div className="flex items-center gap-2">
             {isThinking ? (
-              <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
+              <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
             ) : (
               <Cpu className="w-4 h-4 text-green-500" />
             )}
@@ -166,12 +166,12 @@ function TraceStepItem({ step }: { step: TraceStep }) {
         label: 'Complete',
       };
     }
-    return {
-      icon: <Cpu className="w-4 h-4 text-purple-500" />,
-      bgColor: 'bg-purple-50 dark:bg-purple-900/30',
-      borderColor: 'border-purple-200 dark:border-purple-800',
-      label: step.action.replace(/_/g, ' '),
-    };
+      return {
+        icon: <Cpu className="w-4 h-4 text-orange-500" />,
+        bgColor: 'bg-orange-50 dark:bg-orange-900/30',
+        borderColor: 'border-orange-200 dark:border-orange-800',
+        label: step.action.replace(/_/g, ' '),
+      };
   };
 
   const style = getActionStyle();

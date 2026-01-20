@@ -232,7 +232,7 @@ export function AgentChatInput({
       )}
 
       {/* Input area */}
-      <div className="relative flex items-end gap-2 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-purple-500/20 transition-all">
+      <div className="relative flex items-end gap-2 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm focus-within:ring-2 focus-within:ring-orange-500/20 transition-all">
         {/* Image upload button */}
         <button
           onClick={handleImageClick}
@@ -280,13 +280,13 @@ export function AgentChatInput({
             <Square className="w-5 h-5" />
           </button>
         ) : (
-          <button
+            <button
             onClick={handleSend}
             disabled={!canSend}
             className={`
               p-2 rounded-lg transition-all duration-200
               ${canSend
-                ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-sm'
+                ? 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
               }
             `}
