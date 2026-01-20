@@ -581,14 +581,22 @@ export function useAgent(token?: string) {
 
     // Check if we have cached streaming state for this conversation
     const cachedState = streamingCacheRef.current.get(id);
-    if (cachedState) {
-      // Restore from cache - streaming may still be in progress
+    if (cachedState && cachedState.isStreaming) {
+      // Only restore from cache if streaming is STILL IN PROGRESS
+      // If isStreaming is false, it means the connection was lost (e.g., page refresh)
+      // and we should load fresh data from server instead of using stale cache
       setSessionId(cachedState.sessionId);
       setMessages(cachedState.messages);
       setIsStreaming(cachedState.isStreaming);
       setIsLoading(cachedState.isStreaming);
       setError(null);
       return;
+    }
+
+    // Clear any stale cache for this session (isStreaming=false means connection was lost)
+    if (cachedState && !cachedState.isStreaming) {
+      streamingCacheRef.current.delete(id);
+      clearStreamingCache(id);
     }
 
     // Check if this is a temporary ID (not yet created on server)

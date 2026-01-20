@@ -134,33 +134,57 @@ async def conversation(request: ConversationRequest, http_request: Request):
             for img in request.images
         ]
     
-    async def stream_with_disconnect_detection() -> AsyncGenerator[str, None]:
-        """Wrapper generator that detects client disconnection."""
+    # Use queue-based approach to ensure backend continues even if client disconnects
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+    user_id = getattr(http_request.state, "user_id", None)
+
+    async def process_in_background():
+        """Background task that processes the chat and puts results in queue.
+
+        This task runs independently from the client connection, ensuring
+        messages are saved to database even if client refreshes/disconnects.
+        """
         try:
             async for chunk in conversation_service.chat(
                 message=secured_message,
                 conversation_id=request.conversation_id,
-                user_id=getattr(http_request.state, "user_id", None),
+                user_id=user_id,
                 stream=True,
                 extra_options=request.extra_options,
                 images=images_data,
             ):
-                # Check if client is still connected
-                if await http_request.is_disconnected():
-                    logger.info("Client disconnected, stopping stream")
+                await queue.put(chunk)
+        except Exception as e:
+            logger.error(f"Background processing error: {e}", exc_info=True)
+        finally:
+            await queue.put(None)  # Signal completion
+
+    async def stream_from_queue() -> AsyncGenerator[str, None]:
+        """Stream data from queue to client.
+
+        If client disconnects, this generator stops but the background
+        task continues processing to ensure messages are saved.
+        """
+        try:
+            while True:
+                chunk = await queue.get()
+                if chunk is None:
                     break
                 yield chunk
         except asyncio.CancelledError:
-            logger.info("Stream cancelled by client")
-            raise
-        except Exception as e:
-            logger.error(f"Stream error: {e}", exc_info=True)
-            raise
-    
+            # Client disconnected (e.g., page refresh)
+            # Background task continues running independently
+            logger.info("Stream cancelled by client, backend continues processing in background")
+            # Don't raise - let the background task complete
+
     try:
         if request.stream:
+            # Start background task BEFORE returning response
+            # This ensures processing continues even if client disconnects
+            asyncio.create_task(process_in_background())
+
             return StreamingResponse(
-                stream_with_disconnect_detection(),
+                stream_from_queue(),
                 media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",

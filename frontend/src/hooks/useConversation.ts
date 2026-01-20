@@ -611,14 +611,16 @@ export function useConversation(token?: string) {
   
   const selectConversation = useCallback(async (id: string) => {
     if (!id) return;
-    
+
     // Don't abort ongoing requests - let them continue in background
     // Just switch the view
-    
+
     // Check if we have cached streaming state for this conversation
     const cachedState = streamingCacheRef.current.get(id);
-    if (cachedState) {
-      // Restore from cache - streaming may still be in progress
+    if (cachedState && cachedState.isStreaming) {
+      // Only restore from cache if streaming is STILL IN PROGRESS
+      // If isStreaming is false, it means the connection was lost (e.g., page refresh)
+      // and we should load fresh data from server instead of using stale cache
       setConversationId(cachedState.conversationId);
       setMessages(cachedState.messages);
       setIsStreaming(cachedState.isStreaming);
@@ -626,7 +628,13 @@ export function useConversation(token?: string) {
       setError(null);
       return;
     }
-    
+
+    // Clear any stale cache for this conversation (isStreaming=false means connection was lost)
+    if (cachedState && !cachedState.isStreaming) {
+      streamingCacheRef.current.delete(id);
+      clearStreamingCache(id);
+    }
+
     // Check if this is a temporary ID (not yet created on server)
     // These IDs start with 'temp-'
     if (id.startsWith('temp-')) {
@@ -637,7 +645,7 @@ export function useConversation(token?: string) {
       setError('This conversation has not been saved yet.');
       return;
     }
-    
+
     // Reset streaming state when switching to a non-cached conversation
     setIsStreaming(false);
     setIsLoading(true);
