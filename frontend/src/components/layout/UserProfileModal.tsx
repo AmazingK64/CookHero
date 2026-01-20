@@ -5,8 +5,8 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Settings, Palette } from 'lucide-react';
-import { getProfile, updateProfile } from '../../services/api';
+import { X, Settings, Palette, Plug } from 'lucide-react';
+import { createMcpServer, getProfile, listMcpServers, updateProfile } from '../../services/api';
 import { useAuth, useTheme } from '../../contexts';
 
 export interface UserProfileModalProps {
@@ -24,7 +24,19 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
   const [userInstruction, setUserInstruction] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | string[] | null>(null);
-  const [activeTab, setActiveTab] = useState<'general' | 'appearance'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'mcp'>('general');
+  const [mcpServers, setMcpServers] = useState<{
+    name: string;
+    endpoint: string;
+    authHeaderName?: string | null;
+    authToken?: string | null;
+  }[]>([]);
+  const [mcpName, setMcpName] = useState('');
+  const [mcpEndpoint, setMcpEndpoint] = useState('');
+  const [mcpAuthHeaderName, setMcpAuthHeaderName] = useState('Authorization');
+  const [mcpAuthToken, setMcpAuthToken] = useState('');
+  const [mcpAuthEnabled, setMcpAuthEnabled] = useState(false);
+  const [mcpLoading, setMcpLoading] = useState(false);
 
   useEffect(() => {
     if (!open || !token) return;
@@ -41,6 +53,20 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
+
+    listMcpServers(token)
+      .then((res) => {
+        if (cancelled) return;
+        setMcpServers(
+          res.servers.map((server) => ({
+            name: server.name,
+            endpoint: server.endpoint,
+            authHeaderName: server.auth_header_name ?? null,
+            authToken: server.auth_token ?? null,
+          }))
+        );
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
     return () => {
       cancelled = true;
     };
@@ -75,6 +101,52 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
     }
   };
 
+  const handleAddMcpServer = async () => {
+    setError(null);
+    if (!token) return setError('Not authenticated');
+    if (!mcpName.trim() || !mcpEndpoint.trim()) {
+      return setError('请填写 MCP 名称和 Endpoint');
+    }
+    setMcpLoading(true);
+    try {
+      const server = await createMcpServer(
+        {
+          name: mcpName.trim(),
+          endpoint: mcpEndpoint.trim(),
+          auth_header_name: mcpAuthEnabled ? mcpAuthHeaderName.trim() : null,
+          auth_token: mcpAuthEnabled ? mcpAuthToken.trim() : null,
+        },
+        token
+      );
+      setMcpServers((prev) => [
+        {
+          name: server.name,
+          endpoint: server.endpoint,
+          authHeaderName: server.auth_header_name ?? null,
+          authToken: server.auth_token ?? null,
+        },
+        ...prev,
+      ]);
+      setMcpName('');
+      setMcpEndpoint('');
+      setMcpAuthEnabled(false);
+      setMcpAuthHeaderName('Authorization');
+      setMcpAuthToken('');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(
+        msg.includes('\n')
+          ? msg
+              .split('\n')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : msg
+      );
+    } finally {
+      setMcpLoading(false);
+    }
+  };
+
   if (!open) return null;
 
   return createPortal(
@@ -87,13 +159,18 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
 
       <div className="relative w-full max-w-4xl bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl border border-gray-200/70 dark:border-gray-800/70 overflow-hidden flex flex-col h-[80vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200/80 dark:border-gray-800/80 shrink-0">
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-50">
-            设置
-          </h3>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200/80 dark:border-gray-800/80 shrink-0 bg-gradient-to-r from-white to-gray-50 dark:from-[#0f172a] dark:to-gray-900/50">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center shadow-lg shadow-orange-500/30">
+              <Settings className="w-4 h-4 text-white" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-50">
+              设置
+            </h3>
+          </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-all duration-200"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -102,18 +179,24 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
 
         <div className="flex flex-1 overflow-hidden">
           {/* Left Sidebar */}
-          <div className="w-56 border-r border-gray-200/80 dark:border-gray-800/80 bg-gray-50/50 dark:bg-gray-900/50 p-3 flex flex-col gap-1 shrink-0">
+          <div className="w-60 border-r border-gray-200/80 dark:border-gray-800/80 bg-gray-50/80 dark:bg-gray-900/30 p-4 flex flex-col gap-2 shrink-0">
             <TabButton
               active={activeTab === 'general'}
               onClick={() => setActiveTab('general')}
-              icon={<Settings size={16} />}
-              label="常规"
+              icon={<Settings size={18} />}
+              label="常规设置"
             />
             <TabButton
               active={activeTab === 'appearance'}
               onClick={() => setActiveTab('appearance')}
-              icon={<Palette size={16} />}
+              icon={<Palette size={18} />}
               label="个性化"
+            />
+            <TabButton
+              active={activeTab === 'mcp'}
+              onClick={() => setActiveTab('mcp')}
+              icon={<Plug size={18} />}
+              label="MCP 配置"
             />
           </div>
 
@@ -159,6 +242,24 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
                 onSave={handleSave}
               />
             )}
+
+            {activeTab === 'mcp' && (
+              <McpTab
+                name={mcpName}
+                endpoint={mcpEndpoint}
+                servers={mcpServers}
+                loading={mcpLoading}
+                authHeaderName={mcpAuthHeaderName}
+                authToken={mcpAuthToken}
+                authEnabled={mcpAuthEnabled}
+                onNameChange={setMcpName}
+                onEndpointChange={setMcpEndpoint}
+                onAuthHeaderNameChange={setMcpAuthHeaderName}
+                onAuthTokenChange={setMcpAuthToken}
+                onAuthEnabledChange={setMcpAuthEnabled}
+                onAdd={handleAddMcpServer}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -184,15 +285,15 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+      className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
         active
-          ? 'bg-gray-200/60 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/50'
+          ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-md shadow-gray-200/50 dark:shadow-gray-900/50 border border-gray-200/60 dark:border-gray-700/60'
+          : 'text-gray-600 dark:text-gray-400 hover:bg-white/60 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-200'
       }`}
     >
       <div
-        className={`p-1.5 rounded-md ${
-          active ? 'bg-white dark:bg-gray-700 shadow-sm' : 'bg-transparent'
+        className={`p-1.5 rounded-lg ${
+          active ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400' : 'bg-transparent'
         }`}
       >
         {icon}
@@ -227,24 +328,24 @@ function GeneralTab({
   return (
     <>
       <div className="flex-1 overflow-y-auto pr-1">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+        <div className="mb-6">
+          <p className="text-xs uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500 mb-2">
             基本信息
           </p>
-          <h4 className="text-xl font-semibold text-gray-900 dark:text-gray-50">
+          <h4 className="text-2xl font-semibold text-gray-900 dark:text-gray-50">
             个人资料
           </h4>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            更新用户名、职业与简介。
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            更新您的用户名、职业与简介，让更多人了解您。
           </p>
         </div>
 
-        <div className="mt-4 space-y-4">
+        <div className="space-y-5">
           <FormField label="用户名">
             <input
               value={username}
               onChange={(e) => onUsernameChange(e.target.value)}
-              className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white/5 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-shadow"
+              className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 focus:outline-none focus:border-orange-400 dark:focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all duration-200"
             />
           </FormField>
 
@@ -252,7 +353,7 @@ function GeneralTab({
             <input
               value={occupation}
               onChange={(e) => onOccupationChange(e.target.value)}
-              className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white/5 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-shadow"
+              className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 focus:outline-none focus:border-orange-400 dark:focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all duration-200"
             />
           </FormField>
 
@@ -261,19 +362,19 @@ function GeneralTab({
               value={bio}
               onChange={(e) => onBioChange(e.target.value)}
               rows={4}
-              className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white/5 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-shadow"
+              className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 resize-none focus:outline-none focus:border-orange-400 dark:focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all duration-200"
             />
           </FormField>
         </div>
       </div>
 
-      <div className="pt-3 flex justify-end shrink-0">
+      <div className="pt-4 flex justify-end shrink-0 border-t border-gray-200/60 dark:border-gray-800/60">
         <button
           onClick={onSave}
           disabled={loading}
-          className="px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-medium disabled:opacity-70 transition-colors shadow-sm"
+          className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium disabled:opacity-70 shadow-lg shadow-orange-500/30 hover:shadow-orange-500/40 transition-all duration-200 hover:-translate-y-0.5"
         >
-          {loading ? '保存中...' : '保存'}
+          {loading ? '保存中...' : '保存更改'}
         </button>
       </div>
     </>
@@ -326,44 +427,72 @@ function AppearanceTab({
     <>
       <div className="flex-1 overflow-y-auto pr-1">
 
-        <div className="mt-4 flex items-center justify-between gap-4">
-          <div>
-            <div className="text-sm font-medium text-gray-800 dark:text-gray-100">
-              主题模式
+        <div className="mb-6">
+          <p className="text-xs uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500 mb-2">
+            外观设置
+          </p>
+          <h4 className="text-2xl font-semibold text-gray-900 dark:text-gray-50">
+            个性化
+          </h4>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            自定义您的使用偏好和 AI 助手交互方式。
+          </p>
+        </div>
+
+        <div className="p-5 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/50 dark:to-gray-900/50 border border-gray-200/60 dark:border-gray-700/60 mb-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
+                {isDark ? (
+                  <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <div className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                  主题模式
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  当前：{isDark ? '深色模式 🌙' : '浅色模式 ☀️'}
+                </div>
+              </div>
             </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              当前：{isDark ? '深色' : '浅色'}
-            </div>
+            <button
+              onClick={toggleTheme}
+              className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-600 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow"
+            >
+              切换主题
+            </button>
           </div>
-          <button
-            onClick={toggleTheme}
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-          >
-            切换为{isDark ? '浅色' : '深色'}
-          </button>
         </div>
 
         {/* AI 个性化设置 */}
-        <div className="mt-8 pt-6 border-t border-gray-200/80 dark:border-gray-800/80">
-          <div className="space-y-2">
-            <h4 className="text-xl font-semibold text-gray-900 dark:text-gray-50">
+        <div className="pt-2">
+          <div className="mb-4">
+            <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
               AI 助手个性化
             </h4>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              配置 AI 助手对你的了解和回答风格偏好,设置后将在所有对话中自动生效。
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              配置 AI 助手对您的了解和回答风格偏好，这些设置将在所有对话中自动生效。
             </p>
           </div>
 
-          <div className="mt-4 space-y-4">
+          <div className="space-y-5">
             <FormField label="个人信息 (Profile)">
               <textarea
                 value={profile}
                 onChange={(e) => onProfileChange(e.target.value)}
                 rows={4}
-                placeholder="描述你的背景、偏好、饮食习惯等,例如: 我是素食主义者,偏好清淡口味,家里有两个孩子..."
-                className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white/5 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-shadow"
+                placeholder="描述你的背景、偏好、饮食习惯等，例如：我是素食主义者，偏好清淡口味，家里有两个孩子..."
+                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 resize-none focus:outline-none focus:border-orange-400 dark:focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all duration-200"
               />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-gray-400"></span>
                 用于描述你的基本背景、身份、饮食偏好等个人特征
               </p>
             </FormField>
@@ -373,10 +502,11 @@ function AppearanceTab({
                 value={userInstruction}
                 onChange={(e) => onUserInstructionChange(e.target.value)}
                 rows={5}
-                placeholder="定义你希望 AI 遵循的回答风格和规则,例如: 请用简洁的语言回答,多使用emoji,优先推荐30分钟内能完成的快手菜..."
-                className="w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white/5 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-shadow"
+                placeholder="定义你希望 AI 遵循的回答风格和规则，例如：请用简洁的语言回答，多使用emoji，优先推荐30分钟内能完成的快手菜..."
+                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 resize-none focus:outline-none focus:border-orange-400 dark:focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all duration-200"
               />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-gray-400"></span>
                 定义 AI 的回答风格、输出格式、关注重点等长期偏好
               </p>
             </FormField>
@@ -384,14 +514,183 @@ function AppearanceTab({
         </div>
       </div>
 
-      <div className="pt-3 flex justify-end shrink-0">
+      <div className="pt-4 flex justify-end shrink-0 border-t border-gray-200/60 dark:border-gray-800/60">
         <button
           onClick={onSave}
           disabled={loading}
-          className="px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-medium disabled:opacity-70 transition-colors shadow-sm"
+          className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium disabled:opacity-70 shadow-lg shadow-orange-500/30 hover:shadow-orange-500/40 transition-all duration-200 hover:-translate-y-0.5"
         >
-          {loading ? '保存中...' : '保存'}
+          {loading ? '保存中...' : '保存更改'}
         </button>
+      </div>
+    </>
+  );
+}
+
+function McpTab({
+  name,
+  endpoint,
+  servers,
+  loading,
+  authHeaderName,
+  authToken,
+  authEnabled,
+  onNameChange,
+  onEndpointChange,
+  onAuthHeaderNameChange,
+  onAuthTokenChange,
+  onAuthEnabledChange,
+  onAdd,
+}: {
+  name: string;
+  endpoint: string;
+  servers: {
+    name: string;
+    endpoint: string;
+    authHeaderName?: string | null;
+    authToken?: string | null;
+  }[];
+  loading: boolean;
+  authHeaderName: string;
+  authToken: string;
+  authEnabled: boolean;
+  onNameChange: (value: string) => void;
+  onEndpointChange: (value: string) => void;
+  onAuthHeaderNameChange: (value: string) => void;
+  onAuthTokenChange: (value: string) => void;
+  onAuthEnabledChange: (value: boolean) => void;
+  onAdd: () => void;
+}) {
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto pr-1">
+        <div className="mb-6">
+          <p className="text-xs uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500 mb-2">
+            高级配置
+          </p>
+          <h4 className="text-2xl font-semibold text-gray-900 dark:text-gray-50">
+            MCP 配置
+          </h4>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            添加 StreamableHTTP 方式的 MCP 服务器，保存后将立即生效。
+          </p>
+        </div>
+
+        <div className="p-5 rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 border border-indigo-200/60 dark:border-indigo-800/60 mb-6">
+          <div className="space-y-4">
+            <FormField label="MCP 名称">
+              <input
+                value={name}
+                onChange={(e) => onNameChange(e.target.value)}
+                placeholder="例如：amap"
+                className="w-full rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 focus:outline-none focus:border-indigo-400 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+              />
+            </FormField>
+
+            <FormField label="Endpoint (StreamableHTTP)">
+              <input
+                value={endpoint}
+                onChange={(e) => onEndpointChange(e.target.value)}
+                placeholder="https://example.com/mcp"
+                className="w-full rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 focus:outline-none focus:border-indigo-400 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+              />
+              <p className="text-xs text-indigo-600/70 dark:text-indigo-400/70 mt-1.5 flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-indigo-400"></span>
+                当前仅支持 StreamableHTTP，可选自定义认证 Header
+              </p>
+            </FormField>
+
+            <div className="flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300 p-3 rounded-lg bg-white/60 dark:bg-gray-800/60 border border-indigo-100 dark:border-indigo-800/40">
+              <input
+                type="checkbox"
+                checked={authEnabled}
+                onChange={(e) => onAuthEnabledChange(e.target.checked)}
+                className="h-4 w-4 rounded border-indigo-300 dark:border-indigo-600 text-indigo-600 dark:text-indigo-400 focus:ring-indigo-500/40"
+              />
+              <span className="font-medium">启用认证 Header</span>
+            </div>
+
+            {authEnabled && (
+              <div className="pl-4 border-l-2 border-indigo-200 dark:border-indigo-700 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                <FormField label="Header 名称">
+                  <input
+                    value={authHeaderName}
+                    onChange={(e) => onAuthHeaderNameChange(e.target.value)}
+                    placeholder="Authorization"
+                    className="w-full rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 focus:outline-none focus:border-indigo-400 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                  />
+                </FormField>
+
+                <FormField label="Token">
+                  <input
+                    value={authToken}
+                    onChange={(e) => onAuthTokenChange(e.target.value)}
+                    placeholder="Bearer ..."
+                    className="w-full rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 focus:outline-none focus:border-indigo-400 dark:focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                  />
+                </FormField>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-5 pt-4 border-t border-indigo-200/60 dark:border-indigo-700/60">
+            <button
+              onClick={onAdd}
+              disabled={loading}
+              className="w-full px-4 py-2.5 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-medium disabled:opacity-70 shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/40 transition-all duration-200 hover:-translate-y-0.5"
+            >
+              {loading ? '保存中...' : '添加 MCP 服务器'}
+            </button>
+          </div>
+        </div>
+
+        <div className="pt-2">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+              已添加的 MCP 服务器
+            </div>
+            <div className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+              {servers.length}
+            </div>
+          </div>
+          <div className="space-y-2">
+            {servers.length === 0 ? (
+              <div className="p-4 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 text-center">
+                暂无自定义 MCP 服务器
+              </div>
+            ) : (
+              servers.map((server) => (
+                <div
+                  key={server.name}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-200/60 dark:border-gray-700/60 bg-white/60 dark:bg-gray-900/40 px-4 py-3 hover:shadow-md hover:border-indigo-300/60 dark:hover:border-indigo-700/60 transition-all duration-200"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/40 dark:to-purple-900/40 flex items-center justify-center">
+                      <Plug className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                        {server.name}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate max-w-[200px]">
+                        {server.endpoint}
+                      </div>
+                      {server.authHeaderName && server.authToken && (
+                        <div className="text-xs text-indigo-500 dark:text-indigo-400 flex items-center gap-1 mt-0.5">
+                          <span className="w-1 h-1 rounded-full bg-indigo-400"></span>
+                          Header: {server.authHeaderName}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 font-medium">
+                    已启用
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </>
   );
