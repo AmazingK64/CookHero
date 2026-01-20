@@ -13,6 +13,17 @@ logger = logging.getLogger(__name__)
 async def register_mcp_servers() -> None:
     """注册所有 MCP 服务器。"""
     await _register_amap_mcp()
+    await _register_custom_mcp_servers()
+
+
+async def _register_custom_mcp_servers() -> None:
+    """注册用户自定义 MCP 服务器。"""
+    from app.services.mcp_service import mcp_service
+
+    try:
+        await mcp_service.register_all()
+    except Exception as e:
+        logger.warning(f"Failed to register custom MCP servers: {e}")
 
 
 async def _register_amap_mcp() -> None:
