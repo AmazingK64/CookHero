@@ -7,7 +7,9 @@ import type {
   AgentHistoryResponse,
   SSEEvent,
   AgentSessionResponse,
-  ToolsListResponse
+  ToolsListResponse,
+  MCPServerListResponse,
+  MCPServer
 } from '../../types';
 
 /**
@@ -16,6 +18,48 @@ import type {
 export async function getAvailableTools(token?: string): Promise<ToolsListResponse> {
   const response = await fetch(`${API_BASE}/agent/tools`, {
     headers: createAuthHeaders(token),
+  });
+
+  if (!response.ok) {
+    const msg = await parseErrorResponse(response);
+    throw new Error(msg || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * List MCP servers for current user
+ */
+export async function listMcpServers(token?: string): Promise<MCPServerListResponse> {
+  const response = await fetch(`${API_BASE}/agent/mcp-servers`, {
+    headers: createAuthHeaders(token),
+  });
+
+  if (!response.ok) {
+    const msg = await parseErrorResponse(response);
+    throw new Error(msg || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Create a new MCP server
+ */
+export async function createMcpServer(
+  payload: {
+    name: string;
+    endpoint: string;
+    auth_header_name?: string | null;
+    auth_token?: string | null;
+  },
+  token?: string
+): Promise<MCPServer> {
+  const response = await fetch(`${API_BASE}/agent/mcp-servers`, {
+    method: 'POST',
+    headers: createJsonHeaders(token),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {

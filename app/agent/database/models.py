@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -126,4 +127,43 @@ class AgentMessageModel(Base):
             "trace": self.trace,
             "thinking_duration_ms": self.thinking_duration_ms,
             "answer_duration_ms": self.answer_duration_ms,
+        }
+
+
+class AgentMCPServerModel(Base):
+    """User-defined MCP server configuration."""
+
+    __tablename__ = "agent_mcp_servers"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    endpoint: Mapped[str] = mapped_column(String(512), nullable=False)
+    auth_header_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    auth_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_agent_mcp_servers_user_name", "user_id", "name", unique=True),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": str(self.id),
+            "user_id": self.user_id,
+            "name": self.name,
+            "endpoint": self.endpoint,
+            "auth_header_name": self.auth_header_name,
+            "auth_token": self.auth_token,
+            "enabled": self.enabled,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
         }

@@ -104,6 +104,21 @@ export interface ToolsListResponse {
   servers: ServerInfo[];
 }
 
+export interface MCPServer {
+  id: string;
+  name: string;
+  endpoint: string;
+  auth_header_name?: string | null;
+  auth_token?: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MCPServerListResponse {
+  servers: MCPServer[];
+}
+
 export interface AgentSessionResponse {
   id: string;
   user_id: string;

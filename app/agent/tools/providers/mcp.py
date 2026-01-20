@@ -17,12 +17,21 @@ class MCPToolProvider:
     def __init__(self):
         self._tools: dict[str, MCPTool] = {}
         self._servers: dict[str, str] = {}
+        self._server_headers: dict[str, dict[str, str]] = {}
         self._clients: dict[str, MCPClient] = {}
 
     # ----- server management -----
 
-    def register_server(self, name: str, endpoint: str) -> None:
+    def register_server(
+        self, name: str, endpoint: str, headers: Optional[dict[str, str]] = None
+    ) -> None:
         self._servers[name] = endpoint
+        if headers:
+            self._server_headers[name] = headers
+        elif name in self._server_headers:
+            del self._server_headers[name]
+        if name in self._clients:
+            del self._clients[name]
 
     def list_servers(self) -> list[str]:
         return list(self._servers.keys())
@@ -32,7 +41,10 @@ class MCPToolProvider:
         if not endpoint:
             return None
         if name not in self._clients:
-            self._clients[name] = MCPClient(endpoint)
+            self._clients[name] = MCPClient(
+                endpoint,
+                headers=self._server_headers.get(name),
+            )
         return self._clients[name]
 
     async def load_server_tools(self, name: str) -> list[MCPTool]:

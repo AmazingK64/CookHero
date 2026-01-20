@@ -27,16 +27,23 @@ class MCPClient:
     - tools/call: 调用指定工具
     """
 
-    def __init__(self, endpoint: str, timeout: float = 30.0):
+    def __init__(
+        self,
+        endpoint: str,
+        timeout: float = 30.0,
+        headers: Optional[dict[str, str]] = None,
+    ):
         """
         初始化 MCP 客户端。
 
         Args:
             endpoint: MCP 服务器端点 URL
             timeout: 请求超时时间（秒）
+            headers: 可选请求头
         """
         self.endpoint = endpoint
         self.timeout = timeout
+        self.headers = headers or {}
         self._session_id: Optional[str] = None
 
     def _generate_request_id(self) -> str:
@@ -66,11 +73,12 @@ class MCPClient:
             "method": method,
         }
         if params:
-            payload["params"] = params # type: ignore
+            payload["params"] = params  # type: ignore
 
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
+            **self.headers,
         }
 
         # Include session ID if available
@@ -193,20 +201,28 @@ class MCPClient:
                 if item.get("type") == "text":
                     result_data.append(item.get("text", ""))
                 elif item.get("type") == "image":
-                    result_data.append({
-                        "type": "image",
-                        "data": item.get("data"),
-                        "mimeType": item.get("mimeType"),
-                    })
+                    result_data.append(
+                        {
+                            "type": "image",
+                            "data": item.get("data"),
+                            "mimeType": item.get("mimeType"),
+                        }
+                    )
                 elif item.get("type") == "resource":
-                    result_data.append({
-                        "type": "resource",
-                        "resource": item.get("resource"),
-                    })
+                    result_data.append(
+                        {
+                            "type": "resource",
+                            "resource": item.get("resource"),
+                        }
+                    )
 
             return ToolResult(
                 success=True,
-                data=result_data if len(result_data) > 1 else result_data[0] if result_data else None,
+                data=result_data
+                if len(result_data) > 1
+                else result_data[0]
+                if result_data
+                else None,
             )
 
         except MCPError as e:

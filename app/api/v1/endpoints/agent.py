@@ -11,12 +11,13 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, HttpUrl
 
 from app.config import settings
 from app.agent.service import agent_service
 from app.agent.registry import AgentHub
 from app.security.dependencies import check_message_security
+from app.services.mcp_service import mcp_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -49,6 +50,34 @@ class ToolsListResponse(BaseModel):
     servers: List[ServerInfo]
 
 
+class MCPServerRequest(BaseModel):
+    """Request model for creating MCP server."""
+
+    name: str = Field(..., min_length=2, max_length=64)
+    endpoint: HttpUrl
+    auth_header_name: Optional[str] = Field(default=None, max_length=128)
+    auth_token: Optional[str] = None
+
+
+class MCPServerResponse(BaseModel):
+    """Response model for MCP server info."""
+
+    id: str
+    name: str
+    endpoint: str
+    auth_header_name: Optional[str] = None
+    auth_token: Optional[str] = None
+    enabled: bool
+    created_at: str
+    updated_at: str
+
+
+class MCPServerListResponse(BaseModel):
+    """Response model for MCP server list."""
+
+    servers: List[MCPServerResponse]
+
+
 class ImageData(BaseModel):
     """Image data for multimodal requests."""
 
@@ -60,7 +89,9 @@ class ImageData(BaseModel):
     def validate_mime_type(cls, v: str) -> str:
         """Validate image MIME type."""
         if v not in SUPPORTED_IMAGE_FORMATS:
-            raise ValueError(f"不支持的图片格式: {v}。支持的格式: {SUPPORTED_IMAGE_FORMATS}")
+            raise ValueError(
+                f"不支持的图片格式: {v}。支持的格式: {SUPPORTED_IMAGE_FORMATS}"
+            )
         return v
 
     @field_validator("data")
@@ -192,6 +223,43 @@ async def list_available_tools(http_request: Request) -> ToolsListResponse:
     return ToolsListResponse(servers=servers)
 
 
+@router.get("/agent/mcp-servers")
+async def list_mcp_servers(http_request: Request) -> MCPServerListResponse:
+    """List MCP servers for current user."""
+    user_id = getattr(http_request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="需要登录")
+
+    servers = await mcp_service.list_servers(user_id)
+    return MCPServerListResponse(
+        servers=[MCPServerResponse(**server.to_dict()) for server in servers]
+    )
+
+
+@router.post("/agent/mcp-servers", status_code=201)
+async def create_mcp_server(
+    payload: MCPServerRequest, http_request: Request
+) -> MCPServerResponse:
+    """Create MCP server and register immediately."""
+    user_id = getattr(http_request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="需要登录")
+
+    try:
+        server = await mcp_service.create_server(
+            user_id=user_id,
+            name=payload.name,
+            endpoint=str(payload.endpoint),
+            enabled=True,
+            auth_header_name=payload.auth_header_name,
+            auth_token=payload.auth_token,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return MCPServerResponse(**server.to_dict())
+
+
 @router.post("/agent/chat")
 async def agent_chat(request: AgentChatRequest, http_request: Request):
     """
@@ -227,7 +295,9 @@ async def agent_chat(request: AgentChatRequest, http_request: Request):
     # Convert images to dict format for service
     images_data = None
     if request.images:
-        images_data = [{"data": img.data, "mime_type": img.mime_type} for img in request.images]
+        images_data = [
+            {"data": img.data, "mime_type": img.mime_type} for img in request.images
+        ]
 
     logger.info(
         f"Agent chat request: '{secured_message[:50]}...', agent={request.agent_name}, images={len(images_data) if images_data else 0}"
@@ -238,8 +308,15 @@ async def agent_chat(request: AgentChatRequest, http_request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="需要登录")
 
-    async def stream_with_disconnect_detection() -> AsyncGenerator[str, None]:
-        """Wrapper generator that detects client disconnection."""
+    # Use queue-based approach to ensure backend continues even if client disconnects
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+    async def process_in_background():
+        """Background task that processes the chat and puts results in queue.
+
+        This task runs independently from the client connection, ensuring
+        messages are saved to database even if client refreshes/disconnects.
+        """
         try:
             async for chunk in agent_service.chat(
                 session_id=request.session_id,
@@ -250,22 +327,40 @@ async def agent_chat(request: AgentChatRequest, http_request: Request):
                 selected_tools=request.selected_tools,
                 images=images_data,
             ):
-                # Check if client is still connected
-                if await http_request.is_disconnected():
-                    logger.info("Client disconnected, stopping stream")
+                await queue.put(chunk)
+        except Exception as e:
+            logger.error(f"Background processing error: {e}", exc_info=True)
+        finally:
+            await queue.put(None)  # Signal completion
+
+    async def stream_from_queue() -> AsyncGenerator[str, None]:
+        """Stream data from queue to client.
+
+        If client disconnects, this generator stops but the background
+        task continues processing to ensure messages are saved.
+        """
+        try:
+            while True:
+                chunk = await queue.get()
+                if chunk is None:
                     break
                 yield chunk
         except asyncio.CancelledError:
-            logger.info("Stream cancelled by client")
-            raise
-        except Exception as e:
-            logger.error(f"Stream error: {e}", exc_info=True)
-            raise
+            # Client disconnected (e.g., page refresh)
+            # Background task continues running independently
+            logger.info(
+                "Stream cancelled by client, backend continues processing in background"
+            )
+            # Don't raise - let the background task complete
 
     try:
         if request.stream:
+            # Start background task BEFORE returning response
+            # This ensures processing continues even if client disconnects
+            asyncio.create_task(process_in_background())
+
             return StreamingResponse(
-                stream_with_disconnect_detection(),
+                stream_from_queue(),
                 media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
