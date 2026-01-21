@@ -22,14 +22,14 @@ class KnowledgeBaseSearchTool(BaseTool):
     """
 
     name = "knowledge_base_search"
-    description = "搜索 CookHero 知识库，返回相关内容供回答使用。"
+    description = "搜索 CookHero 内置知识库，返回可引用的上下文与来源。"
     parameters = {
         "type": "object",
         "properties": {
             "query": {"type": "string", "description": "检索问题或关键词"},
             "skip_rewrite": {
                 "type": "boolean",
-                "description": "是否跳过查询重写",
+                "description": "是否跳过查询重写（默认 false）",
                 "default": False,
             },
         },

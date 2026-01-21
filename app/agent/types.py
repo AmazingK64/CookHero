@@ -86,6 +86,7 @@ class AgentContext:
     current_message: str = ""  # 当前用户消息
     images: list[dict] | None = None  # [{data, mime_type, url}]
     vision_analysis: dict | None = None  # Vision analysis result
+    vision_tool_call_id: str | None = None  # Vision tool call id
 
 
 @dataclass
@@ -123,3 +124,5 @@ class AgentMessage:
     created_at: datetime
     trace: list[dict] | None = None  # 执行轨迹（仅 assistant）
     tool_calls: list[dict] | None = None  # Tool/Skill 调用记录
+    tool_call_id: str | None = None
+    tool_name: str | None = None

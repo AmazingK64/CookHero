@@ -96,7 +96,7 @@ function StatCard({ title, value, subtitle, icon, color = 'orange' }: StatCardPr
   };
 
   return (
-    <div className={`bg-gradient-to-br ${colorClasses[color]} border rounded-2xl p-4 shadow-sm min-w-0 flex-shrink-0`}>
+    <div className={`bg-gradient-to-br ${colorClasses[color]} border rounded-2xl p-4 shadow-sm min-w-0 flex-shrink-0 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5`}>
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider mb-1 truncate">
@@ -610,7 +610,7 @@ export default function LLMStatsPage() {
         {/* Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           {/* Trends Chart */}
-          <section className="lg:col-span-2 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm p-4 md:p-5 flex flex-col">
+          <section className="lg:col-span-2 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm p-4 md:p-5 flex flex-col transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-orange-100 dark:bg-orange-500/10 flex items-center justify-center">
@@ -636,7 +636,7 @@ export default function LLMStatsPage() {
           </section>
 
           {/* Distribution Chart */}
-          <section className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm p-4 md:p-5 flex flex-col h-full min-h-[400px] min-w-[320px]">
+          <section className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm p-4 md:p-5 flex flex-col h-full min-h-[400px] min-w-[320px] transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
             <div className="flex flex-col gap-4 h-full">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -711,7 +711,7 @@ export default function LLMStatsPage() {
 
 
         {/* Date Range Picker */}
-        <div className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm p-4 md:p-5 mb-6 flex items-center justify-between gap-4 flex-wrap">
+        <div className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm p-4 md:p-5 mb-6 flex items-center justify-between gap-4 flex-wrap transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
              <div className="flex items-center gap-2">
                  <div className="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-500/10 flex items-center justify-center">
                     <Clock className="w-4 h-4 text-violet-500" />
@@ -744,7 +744,7 @@ export default function LLMStatsPage() {
         </div>
 
         {/* Detailed Table */}
-        <div className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
              <h3 className="font-semibold text-gray-900 dark:text-white">{tableTab === 'module' ? '模块详情' : '模型详情'}</h3>
              <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
@@ -816,7 +816,7 @@ export default function LLMStatsPage() {
         </div>
 
         {/* Tool Statistics Section */}
-        <div className="mt-6 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
+        <div className="mt-6 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

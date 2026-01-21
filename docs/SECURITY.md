@@ -1,6 +1,6 @@
 # CookHero Security Policy Document
 
-This document details the security protection system, technical implementation, and interception mechanisms of the CookHero project.
+This document details the security protection system, technical implementation, and interception mechanisms of the CookHero platform, covering conversation, agent, and diet management workflows.
 
 ---
 
@@ -396,12 +396,22 @@ class ImageData(BaseModel):
         return v
 ```
 
+Agent and diet logging endpoints accept up to 4 images with a 10MB per-image hard limit for multimodal records.
+
 ### 6.3 Validation Configuration
 
 | Configuration Item | Default Value | Description |
 |-------------------|---------------|-------------|
 | `MAX_MESSAGE_LENGTH` | `10000` | Maximum message characters |
-| `MAX_IMAGE_SIZE_MB` | `5` | Maximum image size (MB) |
+| `MAX_IMAGE_SIZE_MB` | `5` | Maximum image size (MB) for conversation endpoints (Agent/diet logging allows 10MB) |
+
+### 6.4 MCP Server Validation
+
+Custom MCP server registration is validated to prevent header injection and invalid endpoints:
+
+- MCP server name must match `^[a-zA-Z0-9_-]{2,64}$`
+- Endpoint must start with `http://` or `https://`
+- Auth header name and token must be provided together, with newline checks
 
 ---
 
@@ -640,130 +650,6 @@ Headers: Retry-After: 60
     ▼
 [Audit Log] Record rate_limit.exceeded event
 ```
-
----
-
-## 12. Deployment Recommendations
-
-### 12.1 Production Environment Checklist
-
-- [ ] Set strong random `JWT_SECRET_KEY` (at least 32 characters)
-- [ ] Enable HTTPS
-- [ ] Configure reverse proxy (Nginx/Cloudflare)
-- [ ] Enable rate limiting
-- [ ] Enable prompt injection protection
-- [ ] Configure log collection (ELK/Splunk)
-- [ ] Regularly review audit logs
-- [ ] Set API key rotation policy
-- [ ] Monitor abnormal request patterns
-
-### 12.2 Environment Variable Check
-
-```bash
-# Required
-JWT_SECRET_KEY=your-secure-random-key-here-min-32-chars
-
-# Recommended to enable
-RATE_LIMIT_ENABLED=true
-PROMPT_GUARD_ENABLED=true
-MAX_MESSAGE_LENGTH=10000
-```
-
-### 12.3 Docker Security Recommendations
-
-```dockerfile
-# Run as non-root user
-RUN addgroup -g 1000 app && adduser -u 1000 -G app -s /bin/sh -D app
-USER app
-
-# Limit resources
-docker run --memory=512m --cpus=1
-```
-
----
-
-## 13. Dependency Security
-
-```txt
-# requirements.txt
-nemoguardrails==0.12.0        # NVIDIA NeMo Guardrails framework
-redis>=4.0.0                  # Rate limiting storage
-bcrypt>=4.0.0                 # Password hashing
-python-jose>=3.3.0            # JWT handling
-passlib>=1.7.4                # Password validation
-```
-
-### Security Update Recommendations
-
-```bash
-# Regularly check dependencies for vulnerabilities
-pip install safety
-safety check -r requirements.txt
-
-# Update dependencies
-pip install -U nemoguardrails redis bcrypt python-jose
-```
-
----
-
-## 14. Incident Response Process
-
-### 14.1 Security Event Classification
-
-| Level | Description | Response Time |
-|-------|-------------|---------------|
-| P1 Critical | System compromised, data breach | 1 hour |
-| P2 High | Account compromised, frequent attacks | 4 hours |
-| P3 Medium | Single attack attempt, abnormal behavior | 24 hours |
-| P4 Low | Minor violation, suspicious behavior | 72 hours |
-
-### 14.2 Response Steps
-
-1. **Detection**: Discover anomalies through audit logs or monitoring system
-2. **Assessment**: Determine event severity and impact scope
-3. **Containment**: Take temporary measures (e.g., IP ban, account lockout)
-4. **Investigation**: Analyze logs, determine attack vector
-5. **Remediation**: Fix vulnerabilities, strengthen protection
-6. **Recovery**: Restore normal service
-7. **Post-incident Review**: Summarize experience, improve protection
-
----
-
-## 15. Monitoring Alerts
-
-### 15.1 Recommended Monitoring Metrics
-
-| Metric | Threshold | Alert Type |
-|--------|-----------|------------|
-| Login failure rate | > 20% | Warning |
-| Prompt injection blocks | > 10/minute | Warning |
-| Rate limit triggers | > 50/minute | Warning |
-| Abnormal IP count | > 100 | Critical |
-| API Key usage anomaly | > 1000 requests/minute | Warning |
-
-### 15.2 Log Collection Recommendations
-
-Recommended tools for collecting and analyzing audit logs:
-- **ELK Stack**: Elasticsearch + Logstash + Kibana
-- **Splunk**: Commercial log analysis platform
-- **Grafana Loki**: Lightweight log aggregation
-- **Datadog**: Cloud-native monitoring platform
-
----
-
-## 16. Version History
-
-| Version | Date | Update Content |
-|---------|------|----------------|
-| v1.6.0 | 2025-01-17 | Added unified security check module (dependencies.py), Agent security integration |
-| v1.5.0 | 2025-01-14 | Added LLM usage tracking feature |
-| v1.4.0 | 2025-01-10 | Added audit log enhancement, event type extension |
-| v1.3.0 | 2024-12-20 | Added NeMo Guardrails integration |
-| v1.2.0 | 2024-12-10 | Added rate limiting, account lockout |
-| v1.1.0 | 2024-11-20 | Added Prompt Guard basic detection |
-| v1.0.0 | 2024-10-15 | Initial security architecture |
-
----
 
 **This document will be continuously updated with security feature iterations.**
 

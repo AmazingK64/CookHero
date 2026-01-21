@@ -18,6 +18,7 @@ export interface ToolSelectorProps {
   selectedTools: string[];
   onSelectionChange: (tools: string[]) => void;
   disabled?: boolean;
+  onExpandChange?: (isExpanded: boolean) => void;
 }
 
 // Compact tool chip component
@@ -215,6 +216,7 @@ export function ToolSelector({
   selectedTools,
   onSelectionChange,
   disabled = false,
+  onExpandChange,
 }: ToolSelectorProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [isMCPExpanded, setIsMCPExpanded] = useState(false);
@@ -236,10 +238,12 @@ export function ToolSelector({
       const response = await getAvailableTools(token);
       setServers(response.servers);
 
-      // Initialize selection with all tools only if this is first load
+      // Initialize selection with builtin tools only if this is first load
       if (!hasInitialized.current && response.servers.length > 0) {
-        const allToolNames = response.servers.flatMap(s => s.tools.map(t => t.name));
-        onSelectionChange(allToolNames);
+        const builtinToolNames = response.servers
+          .filter(server => server.type === 'local')
+          .flatMap(server => server.tools.map(tool => tool.name));
+        onSelectionChange(builtinToolNames);
         hasInitialized.current = true;
       }
     } catch (err) {
@@ -253,6 +257,12 @@ export function ToolSelector({
   useEffect(() => {
     loadTools();
   }, [loadTools]);
+
+  useEffect(() => {
+    onExpandChange?.(isToolsExpanded || isMCPExpanded);
+  }, [isToolsExpanded, isMCPExpanded, onExpandChange]);
+
+  useEffect(() => () => onExpandChange?.(false), [onExpandChange]);
 
   const handleToggleTool = useCallback((toolName: string) => {
     if (disabled) return;

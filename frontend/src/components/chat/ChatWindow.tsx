@@ -104,7 +104,7 @@ function EmptyState({
 }) {
     return (
         <div className="flex flex-col items-center justify-center h-full w-full text-gray-500 dark:text-gray-400 animate-in fade-in duration-500 overflow-x-hidden px-4 box-border">
-            <section className="relative flex-1 flex flex-col items-center justify-center overflow-hidden">
+            <section className="empty-state-hero relative flex-1 flex flex-col items-center justify-center overflow-hidden">
                 <div className="relative group w-full px-4">
                     <div className="w-100 h-48 max-w-5xl mx-auto flex items-center justify-center">
                         <img

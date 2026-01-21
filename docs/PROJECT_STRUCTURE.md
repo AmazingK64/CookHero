@@ -35,6 +35,7 @@ api/
         ├── auth.py           # 用户认证接口（注册、登录、令牌刷新）
         ├── conversation.py   # 对话接口（创建、查询、流式响应）
         ├── agent.py          # Agent 接口（智能对话、工具调用、会话管理）
+        ├── diet.py           # 饮食管理接口（计划餐次、记录、分析、偏好）
         ├── evaluation.py     # RAG 评估接口（统计、趋势、告警）
         ├── llm_stats.py      # LLM 使用统计接口（含工具统计）
         ├── personal_docs.py  # 个人文档接口（上传、删除、列表）
@@ -255,6 +256,7 @@ services/
 ├── auth_service.py            # 认证服务（注册、登录、JWT、账户锁定）
 ├── conversation_service.py    # 对话服务（会话管理、消息处理、流式响应）
 ├── evaluation_service.py      # RAG 评估服务（RAGAS 框架集成）
+├── mcp_service.py             # MCP 服务器管理（注册、鉴权配置）
 ├── rag_service.py             # RAG 服务（检索、生成）
 ├── personal_document_service.py # 个人文档服务（上传、索引）
 └── user_service.py            # 用户服务（用户信息管理）
@@ -363,6 +365,7 @@ agent/
 │   │   ├── calculator.py     # 数学计算工具
 │   │   ├── datetime.py       # 日期时间工具
 │   │   ├── websearch.py      # Web 搜索工具（Tavily）
+│   │   ├── knowledge_base_search.py # 知识库检索工具（RAG）
 │   │   └── image_generator.py # 图片生成工具（DALL-E 3 + imgbb）
 │   ├── providers/        # 工具提供者
 │   │   ├── __init__.py
@@ -407,6 +410,10 @@ agent/
 | `calculator` | 数学计算 | `expression` (数学表达式) |
 | `datetime` | 获取日期时间 | `format`, `timezone` |
 | `web_search` | Web 搜索 | `query`, `max_results`, `search_depth` |
+| `knowledge_base_search` | 知识库检索 | `query`, `skip_rewrite` |
+| `diet_plan` | 饮食计划管理 | `action`, `plan_date`, `meal_type` 等 |
+| `diet_log` | 饮食记录管理 | `action`, `log_date`, `items` 等 |
+| `diet_analysis` | 饮食分析 | `action`, `target_date`, `week_start_date` 等 |
 | `image_generator` | AI 图片生成 | `prompt`, `size`, `quality`, `style` |
 
 **MCP 集成**：
@@ -441,6 +448,32 @@ vision/
 
 ---
 
+### 2.15 饮食管理模块 (`app/diet/`)
+
+```
+diet/
+├── service.py              # 饮食管理服务（计划、记录、分析）
+├── database/
+│   ├── models.py           # 饮食数据模型（计划餐次、记录、偏好）
+│   └── repository.py       # 数据访问层（CRUD、汇总统计）
+├── prompts/
+│   ├── log_parsing.py       # AI 饮食记录解析提示词
+│   └── __init__.py
+└── tools/
+    ├── diet_plan_tool.py   # 计划餐次管理 Tool
+    ├── diet_log_tool.py    # 饮食记录管理 Tool
+    ├── diet_analysis_tool.py # 饮食分析 Tool
+    └── __init__.py
+```
+
+**职责**：
+- 饮食计划（按周/按日）管理，餐次增删改查
+- 饮食记录（手动/AI 文本/AI 图片解析）
+- 每日/每周营养汇总与计划偏差分析
+- 用户饮食偏好、目标信息持久化
+
+---
+
 ## 三、前端应用 (`frontend/`)
 
 ```
@@ -471,14 +504,22 @@ frontend/
 │   ├── pages/            # 页面组件
 │   │   ├── Login.tsx             # 登录页面
 │   │   ├── Register.tsx          # 注册页面
+│   │   ├── diet/                  # 饮食管理页面
+│   │   │   └── DietManagement.tsx # 周计划 + 记录管理
 │   │   ├── Evaluation.tsx        # RAG 评估统计页面
 │   │   └── LLMStats.tsx          # LLM 使用统计页面
 │   ├── services/         # API 服务
-│   │   ├── api.ts                # Axios 实例配置
-│   │   ├── authService.ts        # 认证 API
-│   │   ├── conversationService.ts# 对话 API
-│   │   ├── agentService.ts       # Agent API
-│   │   └── llmStatsService.ts    # LLM 统计 API
+│   │   ├── api/                  # API 模块
+│   │   │   ├── client.ts         # Axios 实例配置
+│   │   │   ├── auth.ts           # 认证 API
+│   │   │   ├── conversation.ts   # 对话 API
+│   │   │   ├── agent.ts          # Agent API
+│   │   │   ├── diet.ts           # 饮食管理 API
+│   │   │   ├── evaluation.ts     # 评估 API
+│   │   │   ├── llmStats.ts       # LLM 统计 API
+│   │   │   ├── knowledge.ts      # 知识库 API
+│   │   │   └── user.ts           # 用户 API
+│   │   └── index.ts              # 服务导出
 │   ├── contexts/         # React Context
 │   │   ├── AuthContext.tsx       # 认证状态管理
 │   │   ├── ThemeContext.tsx      # 主题状态管理
@@ -513,6 +554,8 @@ frontend/
 - `/chat/:id` - 指定对话
 - `/agent` - Agent 智能模式
 - `/agent/:id` - 指定 Agent 会话
+- `/diet` - 饮食管理（周计划 + 记录）
+- `/agent/diet` - Agent 模式下的饮食管理
 - `/knowledge` - 知识库管理
 - `/evaluation` - RAG 评估统计
 - `/llm-stats` - LLM 使用统计
@@ -691,6 +734,22 @@ Python 依赖列表，包含所有后端依赖的精确版本号。
 6. **持久化**：`llm_usage_repository.py` 保存到 PostgreSQL
 7. **统计分析**：前端 `/api/v1/llm-stats/usage` 展示统计结果
 
+### 饮食计划与记录流程
+
+1. **周计划加载**：前端请求 `/api/v1/diet/plans/by-week` 获取一周计划
+2. **新增餐次**：`/diet/plans/meals` 添加早餐/午餐/晚餐/加餐
+3. **标记已吃**：`/diet/meals/{meal_id}/mark-eaten` 自动生成饮食记录
+4. **手动记录**：`/diet/logs` 保存餐次与食物明细
+5. **AI 记录**：`/diet/logs/from-text` 解析自然语言或图片
+6. **数据汇总**：Repository 汇总热量与宏量营养字段
+
+### 营养分析与偏差流程
+
+1. **每日摘要**：`/diet/analysis/daily` 返回当天营养汇总
+2. **每周摘要**：`/diet/analysis/weekly` 聚合全周数据
+3. **偏差分析**：`/diet/analysis/deviation` 对比计划与实际
+4. **目标偏好**：`/diet/preferences` 读取或更新目标与限制
+
 ### Agent 对话流程
 
 1. **用户请求**：前端发送请求到 `/api/v1/agent/chat`（可包含图片）
@@ -825,6 +884,7 @@ async def setup_my_mcp_server():
 
 | 版本 | 日期 | 主要变更 |
 |------|------|---------|
+| v1.9.0 | 2026-01 | 新增饮食管理模块（计划/记录/分析）、知识库检索工具、自定义 MCP 服务器管理 |
 | v1.8.0 | 2026-01 | Agent 多模态支持（图片上传、imgbb 持久化）、用户画像集成、LLM 配置三层化 |
 | v1.7.0 | 2026-01 | 添加 MCP 协议支持、图片生成工具、AgentHub 统一注册、工具提供者架构 |
 | v1.6.0 | 2026-01 | 添加 Agent 模块（ReAct 模式、工具系统、会话管理） |

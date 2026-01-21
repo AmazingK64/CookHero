@@ -16,7 +16,10 @@ CREATE TABLE "public"."agent_messages" (
   "role" varchar(20) COLLATE "pg_catalog"."default" NOT NULL,
   "content" text COLLATE "pg_catalog"."default" NOT NULL,
   "created_at" timestamp(6) NOT NULL DEFAULT now(),
-  "trace" jsonb
+  "trace" jsonb,
+  "tool_calls" jsonb,
+  "tool_call_id" varchar(128) COLLATE "pg_catalog"."default",
+  "tool_name" varchar(128) COLLATE "pg_catalog"."default"
 )
 ;
 ALTER TABLE "public"."agent_messages" OWNER TO "cookhero";

@@ -4,6 +4,7 @@ Agent 上下文组装
 简化版上下文组装，不包含 RAG 和 Web Search。
 """
 
+import json
 import logging
 from typing import Optional
 
@@ -12,6 +13,11 @@ from app.agent.database.repository import AgentRepository
 from app.agent.database.models import AgentSessionModel
 from app.agent.registry import AgentHub
 from app.services.user_service import user_service
+from app.agent.prompts import (
+    USER_ID_PROMPT_TEMPLATE,
+    COMPRESS_SYSTEM_PROMPT,
+    COMPRESS_USER_PROMPT_TEMPLATE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +179,9 @@ class AgentContextBuilder:
         # 1. System prompt（含用户画像和指令）
         system_content = context.system_prompt
 
+        if context.user_id:
+            system_content += USER_ID_PROMPT_TEMPLATE.format(user_id=context.user_id)
+
         if context.user_profile:
             system_content += f"\n\n## 用户画像\n{context.user_profile}"
 
@@ -197,25 +206,10 @@ class AgentContextBuilder:
         if context.images:
             # Build multimodal content with images
             content_parts = []
-
-            # Add vision analysis context if available
-            if context.vision_analysis:
-                vision_desc = context.vision_analysis.get("description", "")
-                if vision_desc:
-                    content_parts.append({
-                        "type": "text",
-                        "text": f"[图片分析结果]\n{vision_desc}\n\n[用户问题]\n{context.current_message}"
-                    })
-                else:
-                    content_parts.append({
-                        "type": "text",
-                        "text": context.current_message
-                    })
-            else:
-                content_parts.append({
-                    "type": "text",
-                    "text": context.current_message
-                })
+            content_parts.append({
+                "type": "text",
+                "text": context.current_message,
+            })
 
             # Add image content
             for img in context.images:
@@ -225,19 +219,43 @@ class AgentContextBuilder:
                         "type": "image_url",
                         "image_url": {"url": img["url"]}
                     })
-                elif img.get("data"):
-                    # Use base64 data URL
-                    mime_type = img.get("mime_type", "image/jpeg")
-                    data_url = f"data:{mime_type};base64,{img['data']}"
-                    content_parts.append({
-                        "type": "image_url",
-                        "image_url": {"url": data_url}
-                    })
 
             messages.append({"role": "user", "content": content_parts})
         else:
             # Plain text message
             messages.append({"role": "user", "content": context.current_message})
+
+        if context.vision_analysis and context.vision_tool_call_id:
+            tool_call = {
+                "id": context.vision_tool_call_id,
+                "type": "function",
+                "function": {
+                    "name": "vision_analysis",
+                    "arguments": json.dumps(
+                        {"image_count": len(context.images or [])},
+                        ensure_ascii=False,
+                    ),
+                },
+            }
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [tool_call],
+                }
+            )
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": context.vision_tool_call_id,
+                    "name": "vision_analysis",
+                    "content": json.dumps(
+                        context.vision_analysis,
+                        ensure_ascii=False,
+                        default=str,
+                    ),
+                }
+            )
 
         return messages
 
@@ -314,13 +332,13 @@ class AgentContextCompressor:
             [f"{msg['role']}: {msg['content']}" for msg in messages_to_compress]
         )
 
-        prompt = f"""请将以下对话内容压缩为简洁的摘要，保留关键信息：
-
-{messages_text}
-
-{"之前的摘要：" + compressed_summary if compressed_summary else ""}
-
-请生成一个整合的摘要，包含所有重要信息。"""
+        previous_summary = (
+            f"之前的摘要：{compressed_summary}" if compressed_summary else ""
+        )
+        prompt = COMPRESS_USER_PROMPT_TEMPLATE.format(
+            messages_text=messages_text,
+            previous_summary=previous_summary,
+        )
 
         # 调用 LLM 生成摘要
         try:
@@ -331,7 +349,7 @@ class AgentContextCompressor:
                     [
                         {
                             "role": "system",
-                            "content": "你是一个对话摘要助手，负责将对话内容压缩为简洁的摘要。",
+                            "content": COMPRESS_SYSTEM_PROMPT,
                         },
                         {"role": "user", "content": prompt},
                     ]

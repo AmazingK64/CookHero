@@ -21,13 +21,13 @@ class CalculatorTool(BaseTool):
     """
 
     name = "calculator"
-    description = "执行数学计算。支持加减乘除、幂运算、三角函数等。"
+    description = "执行数学计算，支持常见函数与表达式。"
     parameters = {
         "type": "object",
         "properties": {
             "expression": {
                 "type": "string",
-                "description": "要计算的数学表达式，如 '2 + 3 * 4' 或 'math.sqrt(16)'",
+                "description": "数学表达式，例如 '2 + 3 * 4' 或 'math.sqrt(16)'",
             }
         },
         "required": ["expression"],

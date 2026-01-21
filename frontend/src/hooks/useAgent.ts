@@ -256,7 +256,7 @@ export function useAgent(token?: string) {
       return history.map((msg) => {
         const baseMessage: Message = {
           id: msg.id,
-          role: msg.role as 'user' | 'assistant',
+          role: msg.role as Message['role'],
           content: msg.content,
           timestamp: new Date(msg.created_at),
           trace: msg.trace,

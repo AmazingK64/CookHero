@@ -153,6 +153,9 @@ class AgentMessageResponse(BaseModel):
     content: str
     created_at: str
     trace: Optional[List[Dict[str, Any]]] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
+    tool_call_id: Optional[str] = None
+    tool_name: Optional[str] = None
     thinking_duration_ms: Optional[int] = None
     answer_duration_ms: Optional[int] = None
 

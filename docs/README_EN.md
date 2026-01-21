@@ -1,7 +1,7 @@
 <div align="center">
 <img src="./image.png" alt="CookHero Logo" width="512" />
 
-**Intelligent Cooking Assistant · Make Everyone a Kitchen Hero**
+**Intelligent Cooking & Diet Management Assistant · Your Personalized Diet Hero**
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.122-009688.svg)](https://fastapi.tiangolo.com/)
@@ -25,69 +25,107 @@
 
 ## 📖 Project Overview
 
-**CookHero** is an intelligent cooking assistant system based on Large Language Models (LLM) and Retrieval-Augmented Generation (RAG) technology. It's more than just a recipe database—it's your personal kitchen advisor that can:
+**CookHero** is a personalized diet management platform powered by LLM, RAG, Agents, multimodal models, and nutrition analytics. It is more than a recipe library—it is your “diet hero assistant” that helps you plan, log, analyze, and improve daily eating habits end-to-end.
 
-- 🔍 **Smart Q&A**: Answer questions about cooking techniques, ingredient pairings, nutrition knowledge, and more
-- 🍽️ **Personalized Recommendations**: Provide dish suggestions based on user preferences, health goals, and dietary restrictions
-- 📝 **Recipe Management**: Upload and manage personal recipes, building a custom knowledge base
-- 🧠 **Deep Understanding**: Understand user intent through multi-turn conversations and provide precise suggestions
-- 🌐 **Real-time Search**: Integrate web search to obtain the latest cooking information and trends
+- 🔍 **Smart Q&A**: Answer cooking techniques, ingredient pairings, and nutrition questions
+- 🍽️ **Personalized Recommendations**: Suggest dishes aligned with goals and dietary restrictions
+- 🗓️ **Meal Planning**: Weekly meal planning for breakfast/lunch/dinner/snacks
+- 🧾 **AI Logging**: One-click text/image logging with estimated nutrition
+- 📊 **Nutrition Analytics**: Daily/weekly summaries with plan vs actual deviation insights
+- 🧠 **Deep Understanding**: Multi-turn conversations for precise action suggestions
+- 🌐 **Real-time Search**: Integrate web search for the latest cooking trends
 
-CookHero targets kitchen beginners, fitness enthusiasts, health-conscious users, people with allergies, and more, aiming to make cooking simple, scientific, and fun.
+CookHero is built for kitchen beginners, fitness/weight-loss users, glycemic control scenarios, allergy-sensitive users, and family kitchens—making cooking more professional, intelligent, and sustainable.
 
 > The internal recipe library is sourced from [Anduin2017/HowToCook](https://github.com/Anduin2017/HowToCook), thanks to the contributors of that project!
 
 ---
 
+## ⚡ Technical Highlights
+
+- **LLM + RAG Hybrid Retrieval**: Vector + BM25 + reranker with multi-level caching
+- **Agent ToolHub**: ReAct reasoning with tool calls and MCP extensibility
+- **Multimodal Parsing**: Image understanding for cooking and diet logging
+- **Quality & Observability**: RAGAS evaluation + LLM usage analytics dashboards
+- **Security by Design**: Prompt injection guardrails, rate limiting, audit logs
+- **Modern Full Stack**: FastAPI + React + PostgreSQL + Milvus + Redis + MinIO
+
 ## ✨ Core Features
 
-### 1. Intelligent Conversational Queries
+### 1. Agent Intelligent Mode
+- **ReAct Pattern**: Implements reasoning + action loop for autonomous decision-making and tool invocation
+- **Multimodal Support**: Upload images (up to 4, max 10MB each), automatically persisted to imgbb storage
+- **User Profile Integration**: Automatically reads user profile and long-term instructions for personalized service
+- **Built-in Tools**:
+  - Diet Tools: meal planning, diet logging, nutrition analysis
+  - Knowledge Base Search: Call the internal RAG retriever with sources
+  - Web Search: Integrated Tavily search engine for real-time information queries
+  - AI Image Generation: Generate images using DALL-E 3 etc., auto-upload to imgbb for persistence
+  - Calculator: Mathematical calculations
+  - DateTime: Get current time, timezone conversion
+- **MCP Protocol Support**: Allow users to register MCP servers with auth headers
+- **Extensible Architecture**: Unified management of Agents, Tools, and Providers via AgentHub
+- **Context Compression**: Automatically compress long conversation history to reduce Token consumption
+- **Real-time Feedback**: SSE event stream for live display of tool calls and results
+- **Execution Tracing**: Complete recording of Agent execution trajectory for debugging and analysis
+- **Tool Selection**: Frontend can dynamically select which tools to use
+
+### 2. Meal Planning & Logging
+- Weekly planning for breakfast/lunch/dinner/snacks
+- Planned meals automatically summarize calories and macros
+- One-click "mark as eaten" converts plan to log entries
+- AI parses text/image diet descriptions with estimated nutrition
+- Support for updating, copying, and annotating meals
+
+### 3. Nutrition Analytics & Goal Tracking
+- Daily/weekly nutrition summaries (calories, protein, fat, carbs)
+- Plan vs actual deviation analysis to surface habit drift
+- Goal management for calorie/protein/fat/carb targets
+- Data source tracking: manual, AI text, AI image
+
+### 4. Intelligent Conversational Queries
 - Natural language understanding of user needs (e.g., "I want to make a low-fat, high-protein dinner")
 - Multi-turn conversation support with context history
 - Automatic intent recognition (query, recommendation, chat, etc.)
 - Streaming responses with real-time display
 
-### 2. Hybrid Retrieval & Reranking
+### 5. Hybrid Retrieval & Reranking
 - **Vector Retrieval**: Semantic similarity matching (based on Milvus)
 - **BM25 Retrieval**: Keyword exact matching
 - **Metadata Filtering**: Filter by cooking time, difficulty, nutrition, etc.
 - **Smart Reranking**: Use Reranker models (e.g., Qwen3-Reranker) for secondary precision ranking
 - **Multi-level Caching**: Redis + Milvus dual-layer caching for improved response speed
 
-### 3. Personalized Settings
-- Users can upload personal recipes, which are automatically analyzed and indexed
+### 6. Personalized Profiles & Knowledge Base
+- Users can upload personal recipes, automatically analyzed and indexed
 - Global recipe library (from [HowToCook](https://github.com/Anduin2017/HowToCook)) merged with personal recipes
 - Intelligent parsing of Markdown format recipes
-- User profiling for preference-based recommendations
+- Persistent diet preferences, allergies, and health goals
 - Customizable model response style
 - Support for OpenAI-compatible custom model integration
 
-### 4. User System
-- User registration/login (JWT authentication)
-- Session management (multi-session isolation, history saving)
-- Dual token mechanism (access token + refresh token)
-
-### 5. Multimodal Support
-- **Image Recognition**: Upload food/ingredient images for intelligent identification
+### 7. Multimodal Support
+- **Image Recognition**: Upload food/ingredient/diet images for intelligent identification
 - **Intent Understanding**: Combine images and text to understand complete user intent
-- **Multiple Scenarios**: Dish identification, ingredient recognition, cooking guidance, recipe queries
+- **Multiple Scenarios**: Dish identification, ingredient recognition, cooking guidance, diet logging, recipe queries
 - **Flexible Integration**: Support for OpenAI-compatible vision model APIs
+- **Image Limits**: Up to 4 images, 10MB per image (Agent/diet logging)
 
-### 6. RAG Evaluation System
+### 8. RAG Evaluation System
 - **Quality Monitoring**: Automated evaluation based on the RAGAS framework
 - **Core Metrics**: Faithfulness, Answer Relevancy
 - **Async Evaluation**: Background asynchronous execution without affecting response speed
 - **Trend Analysis**: Support for evaluation trend viewing and quality alerts
 - **Data Persistence**: Evaluation results stored in PostgreSQL
 
-### 7. LLM Usage Statistics
+### 9. LLM Usage Statistics
 - **Real-time Monitoring**: Track Token usage for each request
 - **Performance Metrics**: Record response time, thinking time, generation time
 - **Statistical Analysis**: Usage statistics by user, session, and module
 - **Tool Tracking**: Record Agent tool call names
 - **Visualization**: Frontend LLM statistics page
 
-### 8. Security Protection System
+### 10. Security Protection System
 - **Multi-layer Defense**: Input validation → Pattern detection → LLM deep detection
 - **Prompt Injection Protection**: Dual detection mechanism based on rules and AI
 - **Rate Limiting**: Redis sliding window algorithm with endpoint-specific limits
@@ -96,22 +134,6 @@ CookHero targets kitchen beginners, fitness enthusiasts, health-conscious users,
 - **Security Audit**: Structured JSON audit logs, SIEM system integration support
 
 > 📖 For detailed security architecture, see [Security Documentation](SECURITY.md)
-
-### 9. Agent Intelligent Mode
-- **ReAct Pattern**: Implements reasoning + action loop for autonomous decision-making and tool invocation
-- **Multimodal Support**: Upload images (up to 4, max 10MB each), automatically persisted to imgbb storage
-- **User Profile Integration**: Automatically reads user profile and long-term instructions for personalized service
-- **Built-in Tools**:
-  - Calculator: Mathematical calculations
-  - DateTime: Get current time, timezone conversion
-  - Web Search: Integrated Tavily search engine for real-time information queries
-  - AI Image Generation: Generate images using DALL-E 3 etc., auto-upload to imgbb for persistence
-- **MCP Protocol Support**: Connect to remote MCP servers for dynamic tool loading (e.g., Amap maps)
-- **Extensible Architecture**: Unified management of Agents, Tools, and Providers via AgentHub
-- **Context Compression**: Automatically compress long conversation history to reduce Token consumption
-- **Real-time Feedback**: SSE event stream for live display of tool calls and results
-- **Execution Tracing**: Complete recording of Agent execution trajectory for debugging and analysis
-- **Tool Selection**: Frontend can dynamically select which tools to use
 
 ---
 
@@ -122,16 +144,13 @@ CookHero targets kitchen beginners, fitness enthusiasts, health-conscious users,
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                      Frontend (React + TypeScript)                       │
-│                      [Chat Mode]        [Agent Mode]                     │
+│                  [Chat Mode]  [Agent Mode]  [Diet Mode]                  │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         FastAPI Backend Service                          │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
-│  │  Auth Module│  │ Conversation│  │ Agent Module│  │ Evaluation  │   │
-│  │             │  │   Module    │  │             │  │   Module    │   │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘   │
+│        Auth · Conversation · Diet · Agent · Evaluation Modules           │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
               ┌─────────────────────┼─────────────────────┐
@@ -231,6 +250,7 @@ See [Project Structure Documentation](PROJECT_STRUCTURE.md)
 
 6. **Access the application**
    - Frontend: http://localhost:5173
+   - Diet Management: http://localhost:5173/diet
    - Backend API: http://localhost:8000
    - API Documentation: http://localhost:8000/docs
 
@@ -475,8 +495,9 @@ pytest tests/test_guardrails.py -v
 - [x] **Agent Intelligent Mode**: ReAct reasoning, tool invocation, session management ✅
 - [x] **MCP Protocol Support**: Remote tool loading, Amap integration ✅
 - [x] **AI Image Generation**: DALL-E 3 integration, imgbb persistent storage ✅
+- [x] **Diet Planning & Logging**: Weekly plans, mark-as-eaten, AI logging ✅
+- [x] **Nutrition Analytics & Goals**: Daily/weekly summaries, deviation analysis ✅
 - [ ] **Voice Interaction**: Voice input queries, voice step narration
-- [ ] **Nutrition Analysis**: Automatic calculation of calories and nutrients
 - [ ] **Community Features**: User sharing, ratings, comments
 - [ ] **Smart Ingredient Management**: Fridge inventory, expiration reminders
 - [ ] **AR Cooking Guidance**: Augmented reality cooking assistance

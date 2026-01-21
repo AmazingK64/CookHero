@@ -49,3 +49,9 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+@media (max-height: 680px), (max-width: 768px) {
+  .empty-state-hero {
+    display: none;
+  }
+}

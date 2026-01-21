@@ -13,9 +13,15 @@ export interface AgentChatWindowProps {
     isLoading: boolean;
     onSuggestionClick?: (text: string) => void;
     error?: string | null;
+    isToolSelectorOpen?: boolean;
 }
 
-export function AgentChatWindow({ messages, isLoading, onSuggestionClick, error }: AgentChatWindowProps) {
+export function AgentChatWindow({ messages, isLoading, onSuggestionClick, error, isToolSelectorOpen }: AgentChatWindowProps) {
+    messages = messages.filter(
+        (message) =>
+        (message.role === 'user' || message.role === 'assistant') && 
+        ((message.content !== null && message.content !== undefined && message.content !== '') || message.trace !== undefined)
+    )
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [isNearBottom, setIsNearBottom] = useState(true);
@@ -92,7 +98,7 @@ export function AgentChatWindow({ messages, isLoading, onSuggestionClick, error 
       `}
         >
             {isEmpty ? (
-                <EmptyState onSuggestionClick={onSuggestionClick} />
+                <EmptyState onSuggestionClick={onSuggestionClick} isToolSelectorOpen={isToolSelectorOpen} />
             ) : (
                 <div className="max-w-3xl mx-auto w-full">
                     {messages.map((message) => (
@@ -116,9 +122,11 @@ export function AgentChatWindow({ messages, isLoading, onSuggestionClick, error 
  * Empty state with welcome message and suggestions for Agent mode
  */
 function EmptyState({
-    onSuggestionClick
+    onSuggestionClick,
+    isToolSelectorOpen
 }: {
     onSuggestionClick?: (text: string) => void;
+    isToolSelectorOpen?: boolean;
 }) {
     return (
         <div className="flex flex-col items-center justify-center h-full w-full text-gray-500 dark:text-gray-400 animate-in fade-in duration-500 overflow-x-hidden px-4 box-border">
@@ -144,17 +152,19 @@ function EmptyState({
                     </div>
                 </div>
             </section> */}
-            <section className="relative flex-1 flex flex-col items-center justify-center overflow-hidden">
-                <div className="relative group w-full px-4">
-                    <div className="w-100 h-48 max-w-5xl mx-auto flex items-center justify-center">
-                        <img
-                            src="/image.png"
-                            alt="CookHero Logo"
-                            className="w-full max-w-4xl object-contain transition-all duration-500 group-hover:scale-105"
-                        />
+            {!isToolSelectorOpen && (
+                <section className="empty-state-hero relative flex-1 flex flex-col items-center justify-center overflow-hidden">
+                    <div className="relative group w-full px-4">
+                        <div className="w-100 h-48 max-w-5xl mx-auto flex items-center justify-center">
+                            <img
+                                src="/image.png"
+                                alt="CookHero Logo"
+                                className="w-full max-w-4xl object-contain transition-all duration-500 group-hover:scale-105"
+                            />
+                        </div>
                     </div>
-                </div>
-            </section>
+                </section>
+            )}
 
             {/* Agent Feature Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 w-full max-w-3xl mb-6 sm:mb-8">

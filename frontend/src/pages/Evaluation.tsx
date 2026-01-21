@@ -84,7 +84,7 @@ function MetricGauge({ label, value, min, max, color, threshold = 0.5 }: MetricG
   ];
 
   return (
-    <div className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 shadow-sm">
+    <div className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
         {isLow && (
@@ -170,7 +170,7 @@ function StatCard({ title, value, subtitle, icon, color = 'orange' }: StatCardPr
   };
 
   return (
-    <div className={`bg-gradient-to-br ${colorClasses[color]} border rounded-2xl p-4 shadow-sm`}>
+    <div className={`bg-gradient-to-br ${colorClasses[color]} border rounded-2xl p-4 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5`}>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider mb-1">
@@ -692,7 +692,7 @@ export default function EvaluationPage() {
         {/* Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Trends Chart */}
-          <section className="lg:col-span-2 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm p-4 md:p-5 flex flex-col">
+          <section className="lg:col-span-2 bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm p-4 md:p-5 flex flex-col transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-orange-100 dark:bg-orange-500/10 flex items-center justify-center">
@@ -718,7 +718,7 @@ export default function EvaluationPage() {
           </section>
 
           {/* Alerts List */}
-          <section className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm p-4 md:p-5 flex flex-col h-full min-h-[400px]">
+          <section className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm p-4 md:p-5 flex flex-col h-full min-h-[400px] transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-red-100 dark:bg-red-500/10 flex items-center justify-center">
                 <AlertTriangle className="w-4 h-4 md:w-5 md:h-5 text-red-500" />

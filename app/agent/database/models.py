@@ -91,7 +91,7 @@ class AgentMessageModel(Base):
     )
     role: Mapped[str] = mapped_column(
         String(20),
-        nullable=False,  # "user", "assistant"
+        nullable=False,  # "user", "assistant", "tool"
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -102,6 +102,11 @@ class AgentMessageModel(Base):
     # assistant: [{iteration, action, tool_calls, content, timestamp, error}, ...]
     # user: [{type: "image", url, display_url, thumb_url}, ...]
     trace: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
+    # Tool 相关字段
+    tool_calls: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    tool_call_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    tool_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
     # 计时统计（仅 assistant 消息）
     thinking_duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -125,6 +130,9 @@ class AgentMessageModel(Base):
             "content": self.content,
             "created_at": self.created_at.isoformat(),
             "trace": self.trace,
+            "tool_calls": self.tool_calls,
+            "tool_call_id": self.tool_call_id,
+            "tool_name": self.tool_name,
             "thinking_duration_ms": self.thinking_duration_ms,
             "answer_duration_ms": self.answer_duration_ms,
         }

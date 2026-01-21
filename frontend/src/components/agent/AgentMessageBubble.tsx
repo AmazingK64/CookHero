@@ -338,12 +338,14 @@ export function AgentMessageBubble({ message, hasError = false }: AgentMessageBu
           {hasText && isUser && (
             <CopyButton content={message.content.trim()} size="sm" />
           )}
-          <span>
-            {message.timestamp.toLocaleTimeString('zh-CN', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </span>
+          {(message.content !== '') && (
+            <span>
+                {message.timestamp.toLocaleTimeString('zh-CN', {
+                hour: '2-digit',
+                minute: '2-digit',
+                })}
+            </span>
+        )}
           
           {/* Real-time elapsed time during streaming */}
           {!isUser && message.isStreaming && elapsedTime > 0 && (

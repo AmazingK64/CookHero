@@ -21,18 +21,18 @@ class DateTimeTool(BaseTool):
     """
 
     name = "datetime"
-    description = "获取当前日期时间信息。"
+    description = "获取当前日期时间信息，支持指定时区与格式化输出。"
     parameters = {
         "type": "object",
         "properties": {
             "format": {
                 "type": "string",
-                "description": "日期时间格式，如 '%Y-%m-%d %H:%M:%S'",
+                "description": "日期时间格式（strftime），例如 '%Y-%m-%d %H:%M:%S'",
                 "default": "%Y-%m-%d %H:%M:%S",
             },
             "timezone": {
                 "type": "string",
-                "description": "时区，如 'Asia/Shanghai'",
+                "description": "时区名称（IANA），例如 'Asia/Shanghai'，默认 UTC",
                 "default": "UTC",
             },
         },

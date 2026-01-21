@@ -17,6 +17,7 @@ export interface AgentChatInputProps {
   externalValue?: string;
   onExternalValueConsumed?: () => void;
   token?: string;
+  onToolsOpenChange?: (isOpen: boolean) => void;
 }
 
 const MAX_IMAGES = 4;
@@ -32,6 +33,7 @@ export function AgentChatInput({
   externalValue,
   onExternalValueConsumed,
   token,
+  onToolsOpenChange,
 }: AgentChatInputProps) {
   const [input, setInput] = useState('');
   const [isComposing, setIsComposing] = useState(false);
@@ -207,6 +209,7 @@ export function AgentChatInput({
         selectedTools={selectedTools}
         onSelectionChange={setSelectedTools}
         disabled={disabled || isStreaming}
+        onExpandChange={onToolsOpenChange}
       />
 
       {/* Image previews */}

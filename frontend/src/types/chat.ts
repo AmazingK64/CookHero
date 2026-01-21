@@ -6,7 +6,7 @@ import type { ImageData } from './api';
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   timestamp: Date;
   sources?: Source[];
@@ -132,10 +132,13 @@ export interface AgentSessionResponse {
 export interface AgentMessageResponse {
   id: string;
   session_id: string;
-  role: string;
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   created_at: string;
   trace?: any[];
+  tool_calls?: any[];
+  tool_call_id?: string;
+  tool_name?: string;
   thinking_duration_ms?: number;
   answer_duration_ms?: number;
 }

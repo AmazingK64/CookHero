@@ -14,6 +14,7 @@ export interface AuthResponse {
 }
 
 export interface UserProfile {
+  user_id: string;
   username: string;
   occupation?: string | null;
   bio?: string | null;

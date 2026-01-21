@@ -8,7 +8,7 @@ function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: Location })?.from?.pathname || '/chat';
+  const from = (location.state as { from?: Location })?.from?.pathname || '/agent';
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

@@ -216,26 +216,32 @@ export default function KnowledgePanel() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 md:p-6">
-      <div className="max-w-5xl mx-auto">
+    <div className="flex-1 overflow-auto p-4 md:p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-orange-500 font-semibold">Knowledge Base</p>
-            <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
-              <BookOpen className="w-5 h-5 md:w-6 md:h-6 text-orange-500" /> 个人文档
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">维护你的专属菜谱与技巧，纳入 RAG 检索</p>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-            <RefreshCcw
-              className={`w-4 h-4 cursor-pointer ${loading ? 'animate-spin' : 'hover:text-gray-700 dark:hover:text-gray-200'}`}
+        <div className="rounded-3xl border border-amber-100/70 dark:border-amber-900/40 bg-gradient-to-br from-orange-50 via-white to-amber-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 p-6 shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="flex items-center gap-3 text-amber-700 dark:text-amber-200">
+              <div className="p-2 rounded-2xl bg-amber-100/70 dark:bg-amber-900/40">
+                <BookOpen className="w-6 h-6" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">知识库</h1>
+                <p className="text-sm text-amber-700/80 dark:text-amber-200/80 mt-1">
+                  维护个人菜谱与技巧，让检索答案更贴合你的偏好
+                </p>
+              </div>
+            </div>
+            <button
               onClick={() => {
                 loadDocuments();
                 loadOptions();
               }}
-            />
-            <span className="hidden md:inline">随时更新生效</span>
+              className="flex items-center gap-2 text-sm px-3 py-2 rounded-xl border border-amber-200/60 dark:border-amber-900/40 text-amber-700 dark:text-amber-200 hover:bg-amber-100/70 dark:hover:bg-amber-900/20 transition-colors"
+            >
+              <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              同步知识库
+            </button>
           </div>
         </div>
 
@@ -368,8 +374,8 @@ export default function KnowledgePanel() {
           {/* Documents List Section */}
           <section className="bg-white dark:bg-gray-900/60 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm p-4 md:p-5">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-blue-100 dark:bg-blue-500/10 flex items-center justify-center">
-                <FileText className="w-4 h-4 md:w-5 md:h-5 text-blue-500" />
+              <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-amber-100 dark:bg-amber-500/10 flex items-center justify-center">
+                <FileText className="w-4 h-4 md:w-5 md:h-5 text-amber-500" />
               </div>
               <div>
                 <h2 className="font-semibold text-base md:text-lg">我的文档 ({documents.length})</h2>
@@ -406,7 +412,7 @@ export default function KnowledgePanel() {
                         <button
                           type="button"
                           onClick={() => handleEdit(doc)}
-                          className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-900/30 transition-colors"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:text-amber-400 dark:hover:bg-amber-900/30 transition-colors"
                           title="编辑"
                         >
                           <Edit2 className="w-3.5 h-3.5" />

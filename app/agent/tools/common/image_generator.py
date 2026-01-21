@@ -26,25 +26,25 @@ class ImageGeneratorTool(BaseTool):
     """
 
     name = "image_generator"
-    description = "根据文本描述生成图片。使用 AI 绘图能力创建图像。"
+    description = "根据文本描述生成图片，并返回可访问的图片 URL。"
     parameters = {
         "type": "object",
         "properties": {
             "prompt": {
                 "type": "string",
-                "description": "图片描述，详细描述想要生成的图像内容",
+                "description": "图片描述，尽量具体（主体、风格、场景、构图）",
             },
             "size": {
                 "type": "string",
                 "enum": ["auto", "1024x1024", "1536x1024", "1024x1536", "256x256", "512x512", "1792x1024", "1024x1792"],
                 "default": "1536x1024",
-                "description": "图片尺寸",
+                "description": "图片尺寸（宽x高）",
             },
             "quality": {
                 "type": "string",
                 "enum": ["standard", "hd", "auto"],
                 "default": "standard",
-                "description": "图片质量：standard 标准，hd 高清，auto 根据需求自动选择",
+                "description": "图片质量：standard 标准，hd 高清，auto 自动",
             },
             "style": {
                 "type": "string",

@@ -1,7 +1,7 @@
 // src/App.tsx
 import { useEffect, useState, useCallback, useRef } from 'react';
 import type { ReactElement } from 'react';
-import { BarChart3, BookOpen, Menu, LogOut, MessageSquare } from 'lucide-react';
+import { BarChart3, BookOpen, Menu, LogOut, Utensils, ChevronDown } from 'lucide-react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ChatWindow, ChatInput, Sidebar, KnowledgePanel } from './components';
 import { AgentChatWindow, AgentChatInput } from './components/agent';
@@ -10,6 +10,7 @@ import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
 import EvaluationPage from './pages/Evaluation';
 import LLMStatsPage from './pages/LLMStats';
+import DietManagementPage from './pages/diet/DietManagement';
 
 /**
  * Chat view component - handles both new chat and existing conversation
@@ -55,6 +56,7 @@ function ChatView() {
   const stopGeneration = isAgentMode ? agentStopGeneration : chatStopGeneration;
 
   const [suggestionText, setSuggestionText] = useState<string>('');
+  const [isToolSelectorOpen, setIsToolSelectorOpen] = useState(false);
   
   // Track if we've done initial sync to avoid re-triggering on subsequent renders
   const initialSyncDone = useRef(false);
@@ -93,6 +95,12 @@ function ChatView() {
     setSuggestionText('');
   };
 
+  useEffect(() => {
+    if (!isAgentMode) {
+      setIsToolSelectorOpen(false);
+    }
+  }, [isAgentMode]);
+
   return (
     <>
       {error && (
@@ -108,6 +116,7 @@ function ChatView() {
              isLoading={isLoading} 
              onSuggestionClick={handleSuggestionClick} 
              error={error}
+             isToolSelectorOpen={isToolSelectorOpen}
            />
           <div className="p-4 max-w-4xl w-full mx-auto">
             <AgentChatInput
@@ -119,6 +128,7 @@ function ChatView() {
               externalValue={suggestionText}
               onExternalValueConsumed={handleSuggestionConsumed}
               token={token || undefined}
+              onToolsOpenChange={setIsToolSelectorOpen}
             />
             <div className="text-center text-xs text-gray-400 mt-2">
               CookHero Agent can make mistakes. Consider checking important information.
@@ -214,11 +224,39 @@ function MainLayout({ children }: { children: React.ReactNode }) {
 
   const { isDark, toggleTheme } = useTheme();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isAnalyticsMenuOpen, setIsAnalyticsMenuOpen] = useState(false);
+  const analyticsMenuRef = useRef<HTMLDivElement>(null);
 
   // Determine current view from pathname
   const isKnowledgeView = location.pathname.includes('/knowledge');
   const isEvaluationView = location.pathname.includes('/evaluation');
   const isLLMStatsView = location.pathname.includes('/llm-stats');
+  const isDietView = location.pathname.includes('/diet');
+  const isAnalyticsView = isEvaluationView || isLLMStatsView;
+  const analyticsLabel = isEvaluationView ? '评估监控' : isLLMStatsView ? '模型统计' : '数据分析';
+
+  useEffect(() => {
+    setIsAnalyticsMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (analyticsMenuRef.current && !analyticsMenuRef.current.contains(event.target as Node)) {
+        setIsAnalyticsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const goBackToChat = useCallback(() => {
+    const basePath = isAgentMode ? '/agent' : '/chat';
+    if (conversationId && !conversationId.startsWith('temp-')) {
+      navigate(`${basePath}/${conversationId}`);
+    } else {
+      navigate(basePath);
+    }
+  }, [conversationId, isAgentMode, navigate]);
 
   const handleToggleAgentMode = useCallback(() => {
       if (isAgentMode) {
@@ -271,7 +309,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
       />
 
       <div className="flex-1 flex flex-col h-full relative">
-        <header className="h-14 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm flex items-center px-4 justify-between">
+        <header className="h-14 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm flex items-center px-4 justify-between z-50">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -285,15 +323,15 @@ function MainLayout({ children }: { children: React.ReactNode }) {
               <h1 className="font-bold text-gray-800 dark:text-gray-100">CookHero</h1>
             </div> */}
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-3 text-xs text-gray-600 dark:text-gray-300 overflow-hidden">
-            {!isKnowledgeView && !isEvaluationView && !isLLMStatsView && conversationId && (
+          <div className="flex items-center gap-1.5 sm:gap-3 text-xs text-gray-600 dark:text-gray-300 overflow-visible">
+            {!isKnowledgeView && !isEvaluationView && !isLLMStatsView && !isDietView && conversationId && (
               <span className="hidden sm:inline font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded truncate" title={conversationId}>
                 ID: {conversationId}
               </span>
             )}
             <button
               onClick={() => {
-                if (isEvaluationView) {
+                if (isDietView) {
                   const basePath = isAgentMode ? '/agent' : '/chat';
                   if (conversationId && !conversationId.startsWith('temp-')) {
                     navigate(`${basePath}/${conversationId}`);
@@ -301,39 +339,17 @@ function MainLayout({ children }: { children: React.ReactNode }) {
                     navigate(basePath);
                   }
                 } else {
-                  navigate(isAgentMode ? '/agent/evaluation' : '/evaluation');
+                  navigate(isAgentMode ? '/agent/diet' : '/diet');
                 }
               }}
               className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full border transition-colors shrink-0 ${
-                isEvaluationView
-                  ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 dark:border-blue-600'
+                isDietView
+                  ? 'border-green-400 bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-200 dark:border-green-600'
                   : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
               }`}
             >
-              <BarChart3 className="w-4 h-4" />
-              <span className="hidden sm:inline">{isEvaluationView ? '返回对话' : '评估监控'}</span>
-            </button>
-            <button
-              onClick={() => {
-                if (isLLMStatsView) {
-                  const basePath = isAgentMode ? '/agent' : '/chat';
-                  if (conversationId && !conversationId.startsWith('temp-')) {
-                    navigate(`${basePath}/${conversationId}`);
-                  } else {
-                    navigate(basePath);
-                  }
-                } else {
-                  navigate(isAgentMode ? '/agent/llm-stats' : '/llm-stats');
-                }
-              }}
-              className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full border transition-colors shrink-0 ${
-                isLLMStatsView
-                  ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200 dark:border-blue-600'
-                  : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4 rotate-90" />
-              <span className="hidden sm:inline">{isLLMStatsView ? '返回对话' : '模型统计'}</span>
+              <Utensils className="w-4 h-4" />
+              <span className="hidden sm:inline">{isDietView ? '返回对话' : '饮食管理'}</span>
             </button>
             <button
               onClick={() => {
@@ -357,6 +373,65 @@ function MainLayout({ children }: { children: React.ReactNode }) {
               <BookOpen className="w-4 h-4" />
               <span className="hidden sm:inline">{isKnowledgeView ? '返回对话' : '知识库'}</span>
             </button>
+            <div ref={analyticsMenuRef} className="relative">
+              <button
+                onClick={() => setIsAnalyticsMenuOpen(prev => !prev)}
+                className={`flex items-center gap-1 px-2 sm:px-3 py-1 rounded-full border transition-all duration-200 shrink-0 ${
+                  isAnalyticsView
+                    ? 'border-orange-400 bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-200 dark:border-orange-600'
+                    : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-300 dark:hover:border-orange-700'
+                }`}
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span className="hidden sm:inline">{analyticsLabel}</span>
+                <ChevronDown className="w-4 h-4" />
+              </button>
+              {isAnalyticsMenuOpen && (
+                <div className="absolute right-0 mt-2 rounded-xl border border-gray-200/60 dark:border-gray-700/60 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm shadow-xl overflow-hidden z-50">
+                  {isAnalyticsView && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsAnalyticsMenuOpen(false);
+                        goBackToChat();
+                      }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-100/50 dark:hover:from-orange-900/30 dark:hover:to-orange-900/10 border-b border-gray-100/50 dark:border-gray-800/50 transition-all duration-200 flex items-center gap-2"
+                    >
+                      {/* <span className="text-orange-500">←</span> */}
+                      返回对话
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsAnalyticsMenuOpen(false);
+                      navigate(isAgentMode ? '/agent/evaluation' : '/evaluation');
+                    }}
+                    className={`w-full text-left px-4 py-2.5 text-sm transition-all duration-200 flex items-center gap-2.5 ${
+                      isEvaluationView
+                        ? 'text-orange-600 dark:text-orange-400 bg-gradient-to-r from-orange-50 to-orange-100/50 dark:from-orange-900/30 dark:to-orange-900/20 font-medium'
+                        : 'text-gray-700 dark:text-gray-200 hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-100/50 dark:hover:from-orange-900/30 dark:hover:to-orange-900/10'
+                    }`}
+                  >
+                                       评估监控
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsAnalyticsMenuOpen(false);
+                      navigate(isAgentMode ? '/agent/llm-stats' : '/llm-stats');
+                    }}
+                    className={`w-full text-left px-4 py-2.5 text-sm transition-all duration-200 flex items-center gap-2.5 ${
+                      isLLMStatsView
+                        ? 'text-orange-600 dark:text-orange-400 bg-gradient-to-r from-orange-50 to-orange-100/50 dark:from-orange-900/30 dark:to-orange-900/20 font-medium'
+                        : 'text-gray-700 dark:text-gray-200 hover:bg-gradient-to-r hover:from-orange-50 hover:to-orange-100/50 dark:hover:from-orange-900/30 dark:hover:to-orange-900/10'
+                    }`}
+                  >
+                     模型统计
+                  </button>
+                </div>
+              )}
+            </div>
             {username && (
               <div className="flex items-center gap-1 sm:gap-2 bg-gray-100 dark:bg-gray-800 px-2 sm:px-3 py-1 rounded-full shrink-0">
                 <span className="font-semibold hidden sm:inline">{username}</span>
@@ -489,6 +564,26 @@ function App() {
         }
       />
       <Route
+        path="/diet"
+        element={
+          <RequireAuth>
+            <MainLayout>
+              <DietManagementPage />
+            </MainLayout>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/agent/diet"
+        element={
+          <RequireAuth>
+            <MainLayout>
+              <DietManagementPage />
+            </MainLayout>
+          </RequireAuth>
+        }
+      />
+      <Route
         path="/agent"
         element={
           <RequireAuth>
@@ -511,9 +606,9 @@ function App() {
       {/* Auth routes */}
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
-      {/* Default redirect to chat */}
-      <Route path="/" element={<Navigate to="/chat" replace />} />
-      <Route path="*" element={<Navigate to="/chat" replace />} />
+      {/* Default redirect to agent */}
+      <Route path="/" element={<Navigate to="/agent" replace />} />
+      <Route path="*" element={<Navigate to="/agent" replace />} />
     </Routes>
   );
 }

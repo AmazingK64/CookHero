@@ -459,13 +459,15 @@ class BaseAgent(ABC):
     ) -> list[dict]:
         """将 Tool 调用和结果添加到消息历史。"""
         # 添加 assistant 消息（包含 tool_calls）
+        assistant_content = self._extract_content(response)
         assistant_msg = {
             "role": "assistant",
-            "content": self._extract_content(response) or "",
+            "content": assistant_content or "",
         }
 
         if hasattr(response, "tool_calls") and response.tool_calls:
             assistant_msg["tool_calls"] = response.tool_calls
+            assistant_msg["content"] = None # type: ignore
 
         messages.append(assistant_msg)
 
@@ -498,7 +500,7 @@ class BaseAgent(ABC):
         # 添加 assistant 消息
         assistant_msg = {
             "role": "assistant",
-            "content": content or "",
+            "content": None,
             "tool_calls": [
                 {
                     "id": tc.id,

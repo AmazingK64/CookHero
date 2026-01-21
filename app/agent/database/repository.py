@@ -4,11 +4,10 @@ Agent 模块数据访问仓库
 提供 Agent Session 和 Message 的 CRUD 操作。
 """
 
-import json
 import logging
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from sqlalchemy import select, delete, func
 from sqlalchemy.orm import selectinload
@@ -119,9 +118,14 @@ class AgentRepository:
             except ValueError:
                 return False
 
-            stmt = delete(AgentSessionModel).where(AgentSessionModel.id == sess_uuid)
+            stmt = select(AgentSessionModel).where(AgentSessionModel.id == sess_uuid)
             result = await session.execute(stmt)
-            return result.rowcount > 0  # type: ignore
+            agent_session = result.scalar_one_or_none()
+            if not agent_session:
+                return False
+
+            await session.delete(agent_session)
+            return True
 
     async def update_session_title(
         self,
@@ -155,6 +159,9 @@ class AgentRepository:
         role: str,
         content: str,
         trace: Optional[list] = None,
+        tool_calls: Optional[list] = None,
+        tool_call_id: Optional[str] = None,
+        tool_name: Optional[str] = None,
         thinking_duration_ms: Optional[int] = None,
         answer_duration_ms: Optional[int] = None,
     ) -> AgentMessageModel:
@@ -178,6 +185,9 @@ class AgentRepository:
                 role=role,
                 content=content,
                 trace=trace,
+                tool_calls=tool_calls,
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
                 thinking_duration_ms=thinking_duration_ms,
                 answer_duration_ms=answer_duration_ms,
             )
@@ -235,29 +245,22 @@ class AgentRepository:
 
             result_list = []
             for msg in messages:
-                msg_dict = {
+                msg_dict: dict[str, Any] = {
                     "role": msg.role,
                     "content": msg.content,
-                    "trace": msg.trace,
                 }
-                # For assistant messages, append tool results to content
-                if msg.role == "assistant":
-                    msg_dict["content"] = msg.content + self._extract_tool_results(msg.trace)
+                if msg.tool_calls:
+                    msg_dict["tool_calls"] = msg.tool_calls
+                    if not msg.content:
+                        msg_dict["content"] = None
+                if msg.role == "tool":
+                    if msg.tool_call_id:
+                        msg_dict["tool_call_id"] = msg.tool_call_id
+                    if msg.tool_name:
+                        msg_dict["name"] = msg.tool_name
                 result_list.append(msg_dict)
 
             return result_list
-        
-    def _extract_tool_results(self, trace: Optional[list]) -> str:
-        if not trace:
-            return ""
-
-        # json convert
-        tool_results = ""
-        for step in trace:
-            if isinstance(step, dict) and step.get("action") == "tool_result":
-                refs = step.get("content")
-                tool_results += f"{refs}\n"
-        return "\nTool:\n" + tool_results
 
     async def get_message_count(self, session_id: str) -> int:
         """获取 Session 的消息总数。"""

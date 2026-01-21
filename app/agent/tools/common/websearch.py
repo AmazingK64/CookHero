@@ -23,14 +23,14 @@ class WebSearchTool(BaseTool):
     """
 
     name = "web_search"
-    description = "搜索互联网获取最新信息。适用于需要实时数据、新闻、事件等场景。"
+    description = "搜索互联网获取最新信息。适合需要实时数据、新闻或外部来源时使用。"
     parameters = {
         "type": "object",
         "properties": {
-            "query": {"type": "string", "description": "搜索关键词"},
+            "query": {"type": "string", "description": "搜索关键词或问题"},
             "max_results": {
                 "type": "integer",
-                "description": "最大结果数量 (1-10)",
+                "description": "返回结果数量 (1-10)",
                 "default": 5,
             },
             "search_depth": {
@@ -42,12 +42,12 @@ class WebSearchTool(BaseTool):
             "include_domains": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "限定搜索域名列表",
+                "description": "限定搜索的域名列表，例如 ['who.int', 'cdc.gov']",
             },
             "exclude_domains": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "排除搜索域名列表",
+                "description": "排除的域名列表",
             },
         },
         "required": ["query"],

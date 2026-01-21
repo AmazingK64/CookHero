@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from dataclasses import asdict
 from typing import Any, AsyncGenerator, Optional
 
@@ -20,6 +21,7 @@ from app.agent.agents import BaseAgent
 from app.agent.context import AgentContextBuilder, AgentContextCompressor
 from app.agent.database.repository import AgentRepository, agent_repository
 from app.agent.registry import AgentHub
+from app.agent.prompts import VISION_ANALYSIS_PROMPT_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
@@ -173,11 +175,35 @@ class AgentService:
                 images=images,
             )
 
+            tool_events = []
+
             # 4. If images present, run vision analysis and emit event
             if context.images:
                 vision_result = await self._analyze_images(context)
                 if vision_result:
+                    vision_tool_call_id = f"vision-{uuid.uuid4().hex}"
                     context.vision_analysis = vision_result
+                    context.vision_tool_call_id = vision_tool_call_id
+                    tool_events.append(
+                        {
+                            "type": "tool_call",
+                            "id": vision_tool_call_id,
+                            "name": "vision_analysis",
+                            "arguments": {
+                                "image_count": len(context.images or []),
+                            },
+                        }
+                    )
+                    tool_events.append(
+                        {
+                            "type": "tool_result",
+                            "tool_call_id": vision_tool_call_id,
+                            "name": "vision_analysis",
+                            "success": True,
+                            "result": vision_result,
+                            "error": None,
+                        }
+                    )
                     yield self._format_event("vision", vision_result)
 
             # 5. 获取 Agent
@@ -218,6 +244,14 @@ class AgentService:
                     iteration = len(
                         [t for t in trace_steps if t.get("action") == "tool_call"]
                     )
+                    tool_events.append(
+                        {
+                            "type": "tool_call",
+                            "id": tool_call.id,
+                            "name": tool_call.name,
+                            "arguments": tool_call.arguments,
+                        }
+                    )
                     # Store tool call in trace
                     trace_steps.append(
                         {
@@ -251,6 +285,16 @@ class AgentService:
                     # Calculate iteration number
                     iteration = len(
                         [t for t in trace_steps if t.get("action") == "tool_result"]
+                    )
+                    tool_events.append(
+                        {
+                            "type": "tool_result",
+                            "tool_call_id": result.tool_call_id,
+                            "name": result.name,
+                            "success": result.success,
+                            "result": result.result,
+                            "error": result.error,
+                        }
                     )
                     # Store tool result in trace
                     trace_steps.append(
@@ -353,6 +397,45 @@ class AgentService:
                 trace=user_trace,
             )
 
+            for event in tool_events:
+                if event.get("type") == "tool_call":
+                    tool_calls = [
+                        {
+                            "id": event.get("id") or "",
+                            "type": "function",
+                            "function": {
+                                "name": event.get("name") or "",
+                                "arguments": json.dumps(
+                                    event.get("arguments") or {},
+                                    ensure_ascii=False,
+                                    default=str,
+                                ),
+                            },
+                        }
+                    ]
+                    await self.repository.save_message(
+                        actual_session_id,
+                        "assistant",
+                        "",
+                        tool_calls=tool_calls,
+                    )
+                elif event.get("type") == "tool_result":
+                    if event.get("success"):
+                        result_content = json.dumps(
+                            event.get("result"),
+                            ensure_ascii=False,
+                            default=str,
+                        )
+                    else:
+                        result_content = f"Error: {event.get('error') or 'Unknown error'}"
+                    await self.repository.save_message(
+                        actual_session_id,
+                        "tool",
+                        result_content,
+                        tool_call_id=event.get("tool_call_id"),
+                        tool_name=event.get("name"),
+                    )
+
             final_thinking_ms = None
             final_answer_ms = None
             if thinking_end_time is not None:
@@ -424,8 +507,19 @@ class AgentService:
                     ImageInput.from_base64(img["data"], img["mime_type"])
                 )
 
+            recent_messages = context.recent_messages if context.recent_messages else []
+            recent_text = "\n".join(
+                [
+                    f"{msg.get('role')}: {msg.get('content', '')}"
+                    for msg in recent_messages
+                ]
+            )
+
             # Build analysis prompt
-            prompt = f"请分析这张图片并描述你看到的内容。用户的问题是：{context.current_message}"
+            prompt = VISION_ANALYSIS_PROMPT_TEMPLATE.format(
+                recent_text=recent_text or "无",
+                current_message=context.current_message,
+            )
 
             # Run vision analysis
             result_str = await vision_provider.analyze(

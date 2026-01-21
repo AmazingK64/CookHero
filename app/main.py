@@ -13,6 +13,7 @@ from app.api.v1.endpoints import (
     evaluation,
     llm_stats,
     agent,
+    diet,
 )
 from app.config import settings
 from app.database.session import init_db, close_db
@@ -184,6 +185,9 @@ async def auth_gateway(request: Request, call_next):
     request.state.username = identity.get("username")
     request.state.user_id = identity.get("user_id")
 
+    print(request.state.user_id)
+    print(request.state.username)
+
     return await call_next(request)
 
 
@@ -201,6 +205,7 @@ app.include_router(
     llm_stats.router, prefix=settings.API_V1_STR, tags=["LLM Statistics"]
 )
 app.include_router(agent.router, prefix=settings.API_V1_STR, tags=["Agent"])
+app.include_router(diet.router, prefix=settings.API_V1_STR, tags=["Diet"])
 
 
 @app.get("/")

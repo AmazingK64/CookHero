@@ -106,7 +106,7 @@ export async function* streamAgentChat(
       if (signal?.aborted) break;
 
       const { done, value } = await reader.read();
-      
+
       if (done) {
         if (buffer.trim()) {
           const remainingLines = buffer.split('\n');
@@ -142,9 +142,32 @@ export async function* streamAgentChat(
   } finally {
     try {
       await reader.cancel();
-    } catch { }
+    } catch {
+      // ignore
+    }
     reader.releaseLock();
   }
+}
+
+export async function agentChat(
+  request: AgentChatRequest,
+  token?: string
+): Promise<{ response: string; session_id?: string; tool_results?: Array<{ name?: string; result?: unknown; success?: boolean; error?: string }> }> {
+  const response = await fetch(`${API_BASE}/agent/chat`, {
+    method: 'POST',
+    headers: createJsonHeaders(token),
+    body: JSON.stringify({
+      ...request,
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    const msg = await parseErrorResponse(response);
+    throw new Error(msg || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
 }
 
 /**
