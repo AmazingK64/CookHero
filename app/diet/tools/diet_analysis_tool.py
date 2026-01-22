@@ -72,10 +72,15 @@ class DietAnalysisTool(BaseTool):
                 "items": {"type": "string"},
                 "description": "喜爱的菜系，如 ['chinese', 'italian']",
             },
-            "disliked_foods": {
+            "avoided_foods": {
                 "type": "array",
                 "items": {"type": "string"},
                 "description": "不喜欢的食物",
+            },
+            "disliked_foods": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "不喜欢的食物（兼容字段）",
             },
             "preferred_foods": {
                 "type": "array",
@@ -111,6 +116,7 @@ class DietAnalysisTool(BaseTool):
         dietary_restrictions: Optional[list] = None,
         allergies: Optional[list] = None,
         favorite_cuisines: Optional[list] = None,
+        avoided_foods: Optional[list] = None,
         disliked_foods: Optional[list] = None,
         preferred_foods: Optional[list] = None,
         calorie_goal: Optional[int] = None,
@@ -204,8 +210,9 @@ class DietAnalysisTool(BaseTool):
                     update_data["allergies"] = allergies
                 if favorite_cuisines is not None:
                     update_data["favorite_cuisines"] = favorite_cuisines
-                if disliked_foods is not None:
-                    update_data["disliked_foods"] = disliked_foods
+                actual_avoided = avoided_foods if avoided_foods is not None else disliked_foods
+                if actual_avoided is not None:
+                    update_data["avoided_foods"] = actual_avoided
                 if preferred_foods is not None:
                     update_data["preferred_foods"] = preferred_foods
                 if calorie_goal is not None:

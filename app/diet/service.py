@@ -547,7 +547,12 @@ class DietService:
 
     async def update_user_preference(self, user_id: str, **kwargs) -> dict:
         """更新用户偏好"""
-        pref = await self.repository.upsert_user_preference(user_id, **kwargs)
+        update_data = dict(kwargs)
+        if "disliked_foods" in update_data and "avoided_foods" not in update_data:
+            update_data["avoided_foods"] = update_data.pop("disliked_foods")
+        else:
+            update_data.pop("disliked_foods", None)
+        pref = await self.repository.upsert_user_preference(user_id, **update_data)
         return pref.to_dict()
 
 

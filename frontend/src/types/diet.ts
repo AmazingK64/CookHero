@@ -180,6 +180,7 @@ export interface UpdatePreferenceRequest {
   dietary_restrictions?: string[];
   allergies?: string[];
   favorite_cuisines?: string[];
+  avoided_foods?: string[];
   disliked_foods?: string[];
   preferred_foods?: string[];
   calorie_goal?: number;
