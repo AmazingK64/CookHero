@@ -51,6 +51,8 @@ function parseTrace(trace: any[] | undefined): TraceStep[] {
         iteration: item.iteration ?? 0,
         timestamp: item.timestamp || new Date().toISOString(),
         tool_calls: item.tool_calls,
+        source: item.source,
+        subagent_name: item.subagent_name,
       };
     }
     
@@ -65,6 +67,8 @@ function parseTrace(trace: any[] | undefined): TraceStep[] {
           iteration: parsed.iteration ?? 0,
           timestamp: parsed.timestamp || new Date().toISOString(),
           tool_calls: parsed.tool_calls,
+          source: parsed.source,
+          subagent_name: parsed.subagent_name,
         };
       } catch {
         // If parsing fails, treat as content
@@ -75,6 +79,8 @@ function parseTrace(trace: any[] | undefined): TraceStep[] {
           iteration: 0,
           timestamp: new Date().toISOString(),
           tool_calls: undefined,
+          source: undefined,
+          subagent_name: undefined,
         };
       }
     }
@@ -86,6 +92,8 @@ function parseTrace(trace: any[] | undefined): TraceStep[] {
       iteration: 0,
       timestamp: new Date().toISOString(),
       tool_calls: undefined,
+      source: undefined,
+      subagent_name: undefined,
     };
   });
 }
@@ -218,9 +226,25 @@ export function AgentMessageBubble({ message, hasError = false }: AgentMessageBu
 
   // Parse trace data - use message.trace if available, otherwise fall back to message.thinking
   const traceData = parseTrace(message.trace || message.thinking);
-  const hasTrace = traceData.length > 0;
+  const mainTrace = traceData.filter((step) => step.source !== 'subagent');
+  const subagentTrace = traceData.filter((step) => step.source === 'subagent');
+  const hasTrace = mainTrace.length > 0;
   const isThinkingPhase = !isUser && !!message.isStreaming && !hasText;
   const showThinkingBlock = !isUser && (hasTrace || isThinkingPhase);
+  const showSubagentBlock = !isUser && subagentTrace.length > 0;
+  const lastSubagentStep = subagentTrace[subagentTrace.length - 1];
+  const isSubagentThinking =
+    !!message.isStreaming &&
+    !!lastSubagentStep &&
+    !['subagent_output', 'error'].includes(lastSubagentStep.action);
+  const subagentNames = Array.from(
+    new Set(subagentTrace.map((step) => step.subagent_name).filter(Boolean))
+  );
+  const subagentLabel = subagentNames.length === 1
+    ? subagentNames[0]
+    : subagentNames.length > 1
+      ? `${subagentNames.length} subagents`
+      : undefined;
 
   // Extract images from trace for user messages
   // Priority: trace URLs (after refresh) > message.images (just sent with base64)
@@ -272,7 +296,7 @@ export function AgentMessageBubble({ message, hasError = false }: AgentMessageBu
   }, [message.isStreaming, message.thinkingStartTime, message.answerStartTime]);
 
   const { ragSources, webSources, ragCount, webCount } = buildSourcesFromTrace(
-    traceData,
+    mainTrace,
     message.sources,
   );
   const hasSources = ragSources.length > 0 || webSources.length > 0;
@@ -294,10 +318,20 @@ export function AgentMessageBubble({ message, hasError = false }: AgentMessageBu
         {showThinkingBlock && (
           <div className="w-full mb-2">
             <AgentThinkingBlock 
-              trace={traceData} 
+              trace={mainTrace} 
               isThinking={isThinkingPhase} 
               thinkingDuration={thinkingDuration}
               hasError={hasError}
+            />
+          </div>
+        )}
+        {showSubagentBlock && (
+          <div className="w-full mb-2">
+            <AgentThinkingBlock
+              trace={subagentTrace}
+              isThinking={isSubagentThinking}
+              title="Subagent Thinking"
+              subtitle={subagentLabel}
             />
           </div>
         )}

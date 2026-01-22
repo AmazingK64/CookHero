@@ -104,8 +104,28 @@ const components: Components = {
   ),
 };
 
+const normalizeMarkdown = (content: string) => {
+  const normalized = content
+    .replace(/\r\n?/g, '\n')
+    .trim();
+
+  const replacements: Array<[RegExp, string]> = [
+    [/(\*\*[^*\n]+?\*\*)\s*([*-]\s+|\d+\.\s+)/g, '$1\n$2'],
+    [/([。！？!?:：])\s*([*-]\s+|\d+\.\s+)/g, '$1\n$2'],
+    [/([^\n])(\#{1,}\s*)/g, '$1\n$2'],
+    [/([^\n])((?:[*-]|\d+\.)\s+\*\*)/g, '$1\n$2'],
+    [/(\*\*[^*]+\*\*)(?=\*\*)/g, '$1\n'],
+  ];
+
+  return replacements.reduce(
+    (text, [pattern, replacement]) => text.replace(pattern, replacement),
+    normalized
+  );
+};
+
 export function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   if (!content) return null;
+  const normalized = normalizeMarkdown(content);
 
   return (
     <div className={`markdown-content ${className}`}>
@@ -114,7 +134,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
         rehypePlugins={[rehypeHighlight]}
         components={components}
       >
-        {content}
+        {normalized}
       </ReactMarkdown>
     </div>
   );

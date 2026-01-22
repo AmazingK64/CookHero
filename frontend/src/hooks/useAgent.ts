@@ -106,6 +106,8 @@ interface TraceStep {
     name: string;
     arguments: Record<string, unknown>;
   }[];
+  source?: 'agent' | 'subagent';
+  subagent_name?: string;
 }
 
 function transformEventToTraceStep(event: any, fallbackIteration: number): TraceStep | null {
@@ -121,6 +123,8 @@ function transformEventToTraceStep(event: any, fallbackIteration: number): Trace
           name: event.name,
           arguments: event.arguments || {},
         }],
+        source: event.source || 'agent',
+        subagent_name: event.subagent_name,
       };
     case 'tool_result':
       return {
@@ -133,6 +137,8 @@ function transformEventToTraceStep(event: any, fallbackIteration: number): Trace
           name: event.name,
           arguments: {},
         }],
+        source: event.source || 'agent',
+        subagent_name: event.subagent_name,
       };
     case 'trace':
       return {
@@ -142,6 +148,8 @@ function transformEventToTraceStep(event: any, fallbackIteration: number): Trace
         iteration: event.iteration ?? fallbackIteration,
         timestamp: event.timestamp || new Date().toISOString(),
         tool_calls: event.tool_calls,
+        source: event.source || 'agent',
+        subagent_name: event.subagent_name,
       };
     default:
       return null;

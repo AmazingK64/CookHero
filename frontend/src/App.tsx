@@ -52,7 +52,6 @@ function ChatView() {
   const isLoading = isAgentMode ? agentIsLoading : chatIsLoading;
   const isStreaming = isAgentMode ? agentIsStreaming : chatIsStreaming;
   const error = isAgentMode ? agentError : chatError;
-  const sendMessage = isAgentMode ? agentSendMessage : chatSendMessage;
   const stopGeneration = isAgentMode ? agentStopGeneration : chatStopGeneration;
 
   const [suggestionText, setSuggestionText] = useState<string>('');
@@ -120,7 +119,7 @@ function ChatView() {
            />
           <div className="p-4 max-w-4xl w-full mx-auto">
             <AgentChatInput
-              onSend={sendMessage}
+              onSend={agentSendMessage}
               onCancel={stopGeneration}
               disabled={isLoading}
               isStreaming={isStreaming}
@@ -145,7 +144,7 @@ function ChatView() {
            />
           <div className="p-4 max-w-4xl w-full mx-auto">
             <ChatInput
-              onSend={sendMessage}
+              onSend={chatSendMessage}
               onCancel={stopGeneration}
               disabled={isLoading}
               isStreaming={isStreaming}
@@ -204,7 +203,7 @@ function MainLayout({ children }: { children: React.ReactNode }) {
   const conversations = isAgentMode
     ? agentSessions.map(s => ({
         id: s.id,
-        title: s.title,
+        title: s.title ?? undefined,
         created_at: s.created_at,
         updated_at: s.updated_at,
         message_count: s.message_count,

@@ -5,9 +5,19 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Settings, Palette, Plug } from 'lucide-react';
-import { createMcpServer, getProfile, listMcpServers, updateProfile } from '../../services/api';
+import { X, Settings, Palette, Plug, Bot, Trash2 } from 'lucide-react';
+import {
+  createMcpServer,
+  getProfile,
+  listMcpServers,
+  updateProfile,
+  createSubagent,
+  deleteSubagent,
+  listSubagents,
+  getAvailableTools,
+} from '../../services/api';
 import { useAuth, useTheme } from '../../contexts';
+import type { SubagentSchema, ToolSchema } from '../../types';
 
 export interface UserProfileModalProps {
   open: boolean;
@@ -24,7 +34,7 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
   const [userInstruction, setUserInstruction] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | string[] | null>(null);
-  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'mcp'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'mcp' | 'agents'>('general');
   const [mcpServers, setMcpServers] = useState<{
     name: string;
     endpoint: string;
@@ -37,6 +47,15 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
   const [mcpAuthToken, setMcpAuthToken] = useState('');
   const [mcpAuthEnabled, setMcpAuthEnabled] = useState(false);
   const [mcpLoading, setMcpLoading] = useState(false);
+  const [subagents, setSubagents] = useState<SubagentSchema[]>([]);
+  const [availableAgentTools, setAvailableAgentTools] = useState<ToolSchema[]>([]);
+  const [agentName, setAgentName] = useState('');
+  const [agentDisplayName, setAgentDisplayName] = useState('');
+  const [agentDescription, setAgentDescription] = useState('');
+  const [agentSystemPrompt, setAgentSystemPrompt] = useState('');
+  const [agentTools, setAgentTools] = useState<string[]>([]);
+  const [agentMaxIterations, setAgentMaxIterations] = useState(10);
+  const [agentLoading, setAgentLoading] = useState(false);
 
   useEffect(() => {
     if (!open || !token) return;
@@ -65,6 +84,28 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
             authToken: server.auth_token ?? null,
           }))
         );
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+
+    listSubagents(token)
+      .then((res) => {
+        if (cancelled) return;
+        setSubagents(res.subagents);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+
+    getAvailableTools(token)
+      .then((res) => {
+        if (cancelled) return;
+        const toolMap = new Map<string, ToolSchema>();
+        res.servers.forEach((server) => {
+          server.tools.forEach((tool) => {
+            if (!tool.name.startsWith('subagent_')) {
+              toolMap.set(tool.name, tool);
+            }
+          });
+        });
+        setAvailableAgentTools(Array.from(toolMap.values()));
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
     return () => {
@@ -147,6 +188,75 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
     }
   };
 
+  const handleAddSubagent = async () => {
+    setError(null);
+    if (!token) return setError('Not authenticated');
+    if (!agentName.trim() || !agentDisplayName.trim()) {
+      return setError('请填写 Agent 名称和显示名称');
+    }
+    if (!agentDescription.trim() || !agentSystemPrompt.trim()) {
+      return setError('请填写 Agent 描述和系统提示词');
+    }
+
+    setAgentLoading(true);
+    try {
+      const created = await createSubagent(
+        {
+          name: agentName.trim(),
+          display_name: agentDisplayName.trim(),
+          description: agentDescription.trim(),
+          system_prompt: agentSystemPrompt.trim(),
+          tools: agentTools,
+          max_iterations: agentMaxIterations,
+          category: 'custom',
+        },
+        token
+      );
+
+      setSubagents((prev) => [created, ...prev]);
+      setAgentName('');
+      setAgentDisplayName('');
+      setAgentDescription('');
+      setAgentSystemPrompt('');
+      setAgentTools([]);
+      setAgentMaxIterations(10);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(
+        msg.includes('\n')
+          ? msg
+              .split('\n')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : msg
+      );
+    } finally {
+      setAgentLoading(false);
+    }
+  };
+
+  const handleDeleteSubagent = async (name: string) => {
+    setError(null);
+    if (!token) return setError('Not authenticated');
+    setAgentLoading(true);
+    try {
+      await deleteSubagent(name, token);
+      setSubagents((prev) => prev.filter((agent) => agent.name !== name));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(
+        msg.includes('\n')
+          ? msg
+              .split('\n')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : msg
+      );
+    } finally {
+      setAgentLoading(false);
+    }
+  };
+
   if (!open) return null;
 
   return createPortal(
@@ -197,6 +307,12 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
               onClick={() => setActiveTab('mcp')}
               icon={<Plug size={18} />}
               label="MCP 配置"
+            />
+            <TabButton
+              active={activeTab === 'agents'}
+              onClick={() => setActiveTab('agents')}
+              icon={<Bot size={18} />}
+              label="Agent 配置"
             />
           </div>
 
@@ -258,6 +374,28 @@ export function UserProfileModal({ open, onClose }: UserProfileModalProps) {
                 onAuthTokenChange={setMcpAuthToken}
                 onAuthEnabledChange={setMcpAuthEnabled}
                 onAdd={handleAddMcpServer}
+              />
+            )}
+
+            {activeTab === 'agents' && (
+              <AgentTab
+                name={agentName}
+                displayName={agentDisplayName}
+                description={agentDescription}
+                systemPrompt={agentSystemPrompt}
+                tools={agentTools}
+                maxIterations={agentMaxIterations}
+                availableTools={availableAgentTools}
+                subagents={subagents}
+                loading={agentLoading}
+                onNameChange={setAgentName}
+                onDisplayNameChange={setAgentDisplayName}
+                onDescriptionChange={setAgentDescription}
+                onSystemPromptChange={setAgentSystemPrompt}
+                onToolsChange={setAgentTools}
+                onMaxIterationsChange={setAgentMaxIterations}
+                onAdd={handleAddSubagent}
+                onDelete={handleDeleteSubagent}
               />
             )}
           </div>
@@ -686,6 +824,229 @@ function McpTab({
                   <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 font-medium">
                     已启用
                   </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function AgentTab({
+  name,
+  displayName,
+  description,
+  systemPrompt,
+  tools,
+  maxIterations,
+  availableTools,
+  subagents,
+  loading,
+  onNameChange,
+  onDisplayNameChange,
+  onDescriptionChange,
+  onSystemPromptChange,
+  onToolsChange,
+  onMaxIterationsChange,
+  onAdd,
+  onDelete,
+}: {
+  name: string;
+  displayName: string;
+  description: string;
+  systemPrompt: string;
+  tools: string[];
+  maxIterations: number;
+  availableTools: ToolSchema[];
+  subagents: SubagentSchema[];
+  loading: boolean;
+  onNameChange: (value: string) => void;
+  onDisplayNameChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+  onSystemPromptChange: (value: string) => void;
+  onToolsChange: (value: string[]) => void;
+  onMaxIterationsChange: (value: number) => void;
+  onAdd: () => void;
+  onDelete: (name: string) => void;
+}) {
+  const customAgents = subagents.filter((agent) => !agent.builtin);
+
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto pr-1">
+        <div className="mb-6">
+          <p className="text-xs uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500 mb-2">
+            高级配置
+          </p>
+          <h4 className="text-2xl font-semibold text-gray-900 dark:text-gray-50">
+            Agent 配置
+          </h4>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            创建自定义 Agent，并指定可用工具与执行策略。
+          </p>
+        </div>
+
+        <div className="p-5 rounded-xl bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border border-purple-200/60 dark:border-purple-800/60 mb-6">
+          <div className="space-y-4">
+            <FormField label="Agent 名称">
+              <input
+                value={name}
+                onChange={(e) => onNameChange(e.target.value)}
+                placeholder="例如：recipe_helper"
+                className="w-full rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 focus:outline-none focus:border-purple-400 dark:focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200"
+              />
+            </FormField>
+
+            <FormField label="显示名称">
+              <input
+                value={displayName}
+                onChange={(e) => onDisplayNameChange(e.target.value)}
+                placeholder="例如：食谱助手"
+                className="w-full rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 focus:outline-none focus:border-purple-400 dark:focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200"
+              />
+            </FormField>
+
+            <FormField label="描述">
+              <textarea
+                value={description}
+                onChange={(e) => onDescriptionChange(e.target.value)}
+                rows={3}
+                placeholder="简要描述 Agent 的能力与擅长任务"
+                className="w-full rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 resize-none focus:outline-none focus:border-purple-400 dark:focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200"
+              />
+            </FormField>
+
+            <FormField label="系统提示词">
+              <textarea
+                value={systemPrompt}
+                onChange={(e) => onSystemPromptChange(e.target.value)}
+                rows={4}
+                placeholder="定义该 Agent 的角色、语气、工作流程等"
+                className="w-full rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-4 py-2.5 resize-none focus:outline-none focus:border-purple-400 dark:focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200"
+              />
+            </FormField>
+
+            <FormField label="最大迭代次数">
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={maxIterations}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  const normalized = Number.isFinite(next)
+                    ? Math.min(Math.max(next, 1), 50)
+                    : 1;
+                  onMaxIterationsChange(normalized);
+                }}
+                className="w-full rounded-lg border border-purple-200 dark:border-purple-800 bg-white dark:bg-gray-800/50 text-gray-900 dark:text-gray-100 px-4 py-2.5 focus:outline-none focus:border-purple-400 dark:focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all duration-200"
+              />
+            </FormField>
+
+            <FormField label="可用工具">
+              <div className="flex flex-wrap gap-2">
+                {availableTools.length === 0 ? (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    暂无可用工具
+                  </span>
+                ) : (
+                  availableTools.map((tool) => {
+                    const isSelected = tools.includes(tool.name);
+                    return (
+                      <label
+                        key={tool.name}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border transition-all duration-150 cursor-pointer ${
+                          isSelected
+                            ? 'bg-purple-500 text-white border-purple-500'
+                            : 'bg-white/70 dark:bg-gray-800/60 text-gray-700 dark:text-gray-300 border-purple-200 dark:border-purple-800 hover:border-purple-400 dark:hover:border-purple-600'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {
+                            if (isSelected) {
+                              onToolsChange(tools.filter((name) => name !== tool.name));
+                            } else {
+                              onToolsChange([...tools, tool.name]);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                        <span>{tool.name}</span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </FormField>
+          </div>
+
+          <div className="mt-5 pt-4 border-t border-purple-200/60 dark:border-purple-700/60">
+            <button
+              onClick={onAdd}
+              disabled={loading}
+              className="w-full px-4 py-2.5 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-medium disabled:opacity-70 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/40 transition-all duration-200 hover:-translate-y-0.5"
+            >
+              {loading ? '保存中...' : '添加 Agent'}
+            </button>
+          </div>
+        </div>
+
+        <div className="pt-2">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+              已创建的 Agent
+            </div>
+            <div className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+              {customAgents.length}
+            </div>
+          </div>
+          <div className="space-y-2">
+            {customAgents.length === 0 ? (
+              <div className="p-4 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 text-center">
+                暂无自定义 Agent
+              </div>
+            ) : (
+              customAgents.map((agent) => (
+                <div
+                  key={agent.name}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-gray-200/60 dark:border-gray-700/60 bg-white/60 dark:bg-gray-900/40 px-4 py-3 hover:shadow-md hover:border-purple-300/60 dark:hover:border-purple-700/60 transition-all duration-200"
+                >
+                  <div>
+                    <div className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                      {agent.display_name}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                      {agent.name}
+                    </div>
+                    {agent.tools.length > 0 && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Tools: {agent.tools.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full font-medium ${
+                        agent.enabled
+                          ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'
+                          : 'bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                      }`}
+                    >
+                      {agent.enabled ? '已启用' : '已禁用'}
+                    </span>
+                    <button
+                      onClick={() => onDelete(agent.name)}
+                      disabled={loading}
+                      className="p-2 rounded-lg text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all duration-200"
+                      aria-label={`Delete ${agent.display_name}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))
             )}

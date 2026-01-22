@@ -1,17 +1,18 @@
 /**
  * Tool Selector Component
  *
- * Tools 和 MCP 分为两个独立方框：
+ * Tools/MCP/Agents 分为独立方框：
  * - Tools 方框：展示 builtin server，点击展开显示工具列表
  * - MCP 方框：展示 MCP servers，点击展开显示工具列表
+ * - Agents 方框：展示 Subagent，点击展开显示列表
  *
- * 两者都使用统一的 ServerCard 组件展示。
+ * Tools/MCP 使用统一的 ServerCard 组件展示。
  */
 
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
-import { ChevronDown, ChevronUp, Wrench, Globe, Check, Info } from 'lucide-react';
-import type { ServerInfo, ToolSchema } from '../../types';
-import { getAvailableTools } from '../../services/api/agent';
+import { ChevronDown, ChevronUp, Wrench, Globe, Check, Info, Bot, Loader2 } from 'lucide-react';
+import type { ServerInfo, ToolSchema, SubagentSchema } from '../../types';
+import { getAvailableTools, listSubagents, toggleSubagent } from '../../services/api/agent';
 
 export interface ToolSelectorProps {
   token?: string;
@@ -89,6 +90,74 @@ const ToolChip = memo(function ToolChip({
               : isSelected
                 ? `${infoSelectedClass} hover:text-white`
                 : `text-gray-400 ${infoHoverClass}`
+            }
+          `}
+        />
+      )}
+    </div>
+  );
+});
+
+// Subagent chip component
+const SubagentChip = memo(function SubagentChip({
+  subagent,
+  isSelected,
+  onToggle,
+  onShowInfo,
+  isShowingInfo,
+  disabled,
+  isToggling,
+}: {
+  subagent: SubagentSchema;
+  isSelected: boolean;
+  onToggle: () => void;
+  onShowInfo: () => void;
+  isShowingInfo: boolean;
+  disabled?: boolean;
+  isToggling?: boolean;
+}) {
+  return (
+    <div
+      className={`
+        inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs
+        transition-colors duration-150 select-none
+        ${disabled || isToggling ? 'opacity-50' : ''}
+        ${isSelected
+          ? 'bg-purple-500 text-white'
+          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+        }
+      `}
+    >
+      {/* Checkbox area */}
+      <div
+        onClick={() => !disabled && !isToggling && onToggle()}
+        className={`
+          flex items-center gap-1 cursor-pointer
+          ${!isSelected ? 'hover:text-purple-600 dark:hover:text-purple-400' : ''}
+        `}
+      >
+        {isToggling ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : isSelected ? (
+          <Check className="w-3 h-3" />
+        ) : null}
+        <span className="font-medium">{subagent.display_name}</span>
+      </div>
+
+      {/* Info icon */}
+      {subagent.description && (
+        <Info
+          onClick={(e) => {
+            e.stopPropagation();
+            onShowInfo();
+          }}
+          className={`
+            w-3 h-3 cursor-pointer flex-shrink-0
+            ${isShowingInfo
+              ? 'text-yellow-300'
+              : isSelected
+                ? 'text-purple-200 hover:text-white'
+                : 'text-gray-400 hover:text-purple-500'
             }
           `}
         />
@@ -220,12 +289,17 @@ export function ToolSelector({
 }: ToolSelectorProps) {
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [isMCPExpanded, setIsMCPExpanded] = useState(false);
+  const [isAgentsExpanded, setIsAgentsExpanded] = useState(false);
   const [servers, setServers] = useState<ServerInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set());
-
-  const hasInitialized = useRef(false);
+  const [subagents, setSubagents] = useState<SubagentSchema[]>([]);
+  const [isSubagentLoading, setIsSubagentLoading] = useState(false);
+  const [subagentError, setSubagentError] = useState<string | null>(null);
+  const [showingInfoAgent, setShowingInfoAgent] = useState<string | null>(null);
+  const [togglingAgents, setTogglingAgents] = useState<Set<string>>(new Set());
+  const selectedToolsRef = useRef<string[]>(selectedTools);
 
   // Load available tools
   const loadTools = useCallback(async () => {
@@ -238,13 +312,24 @@ export function ToolSelector({
       const response = await getAvailableTools(token);
       setServers(response.servers);
 
-      // Initialize selection with builtin tools only if this is first load
-      if (!hasInitialized.current && response.servers.length > 0) {
+      // Always enable builtin tools on load
+      if (response.servers.length > 0) {
         const builtinToolNames = response.servers
           .filter(server => server.type === 'local')
           .flatMap(server => server.tools.map(tool => tool.name));
-        onSelectionChange(builtinToolNames);
-        hasInitialized.current = true;
+        const builtinSet = new Set(builtinToolNames);
+        const mergedSelection = [
+          ...selectedToolsRef.current.filter((name) => !builtinSet.has(name)),
+          ...builtinToolNames,
+        ];
+        const hasDiff =
+          mergedSelection.length !== selectedToolsRef.current.length ||
+          mergedSelection.some(
+            (name, index) => name !== selectedToolsRef.current[index]
+          );
+        if (hasDiff) {
+          onSelectionChange(mergedSelection);
+        }
       }
     } catch (err) {
       console.error('Failed to load tools:', err);
@@ -254,13 +339,71 @@ export function ToolSelector({
     }
   }, [token, onSelectionChange]);
 
+  const loadSubagents = useCallback(async () => {
+    if (!token) return;
+
+    setIsSubagentLoading(true);
+    setSubagentError(null);
+
+    try {
+      const response = await listSubagents(token);
+      setSubagents(response.subagents);
+
+      const enabledSubagentTools = response.subagents
+        .filter((subagent) => subagent.enabled)
+        .map((subagent) => `subagent_${subagent.name}`);
+      const enabledSet = new Set(enabledSubagentTools);
+
+      const cleanedSelection = selectedToolsRef.current.filter(
+        (toolName) =>
+          !toolName.startsWith('subagent_') || enabledSet.has(toolName)
+      );
+      const mergedSelection = [...cleanedSelection];
+
+      enabledSubagentTools.forEach((name) => {
+        if (!mergedSelection.includes(name)) {
+          mergedSelection.push(name);
+        }
+      });
+
+      const hasDiff =
+        mergedSelection.length !== selectedToolsRef.current.length ||
+        mergedSelection.some(
+          (name, index) => name !== selectedToolsRef.current[index]
+        );
+
+      if (hasDiff) {
+        onSelectionChange(mergedSelection);
+      }
+    } catch (err) {
+      console.error('Failed to load subagents:', err);
+      setSubagentError(err instanceof Error ? err.message : 'Failed to load subagents');
+    } finally {
+      setIsSubagentLoading(false);
+    }
+  }, [token, onSelectionChange]);
+
   useEffect(() => {
     loadTools();
   }, [loadTools]);
 
   useEffect(() => {
-    onExpandChange?.(isToolsExpanded || isMCPExpanded);
-  }, [isToolsExpanded, isMCPExpanded, onExpandChange]);
+    loadSubagents();
+  }, [loadSubagents]);
+
+  useEffect(() => {
+    if (isAgentsExpanded) {
+      loadSubagents();
+    }
+  }, [isAgentsExpanded, loadSubagents]);
+
+  useEffect(() => {
+    selectedToolsRef.current = selectedTools;
+  }, [selectedTools]);
+
+  useEffect(() => {
+    onExpandChange?.(isToolsExpanded || isMCPExpanded || isAgentsExpanded);
+  }, [isToolsExpanded, isMCPExpanded, isAgentsExpanded, onExpandChange]);
 
   useEffect(() => () => onExpandChange?.(false), [onExpandChange]);
 
@@ -307,6 +450,56 @@ export function ToolSelector({
     });
   }, []);
 
+  const handleToggleSubagent = useCallback(async (subagent: SubagentSchema) => {
+    if (disabled || !token) return;
+
+    const toolName = `subagent_${subagent.name}`;
+    const isSelected = selectedTools.includes(toolName);
+    const newEnabled = !isSelected;
+
+    if (newEnabled) {
+      onSelectionChange([...selectedTools, toolName]);
+    } else {
+      onSelectionChange(selectedTools.filter(t => t !== toolName));
+    }
+
+    setSubagents(prev =>
+      prev.map(agent =>
+        agent.name === subagent.name ? { ...agent, enabled: newEnabled } : agent
+      )
+    );
+
+    setTogglingAgents(prev => new Set(prev).add(subagent.name));
+
+    try {
+      await toggleSubagent(subagent.name, newEnabled, token);
+    } catch (err) {
+      console.error('Failed to toggle subagent:', err);
+
+      if (newEnabled) {
+        onSelectionChange(selectedTools.filter(t => t !== toolName));
+      } else {
+        onSelectionChange([...selectedTools, toolName]);
+      }
+
+      setSubagents(prev =>
+        prev.map(agent =>
+          agent.name === subagent.name ? { ...agent, enabled: !newEnabled } : agent
+        )
+      );
+    } finally {
+      setTogglingAgents(prev => {
+        const next = new Set(prev);
+        next.delete(subagent.name);
+        return next;
+      });
+    }
+  }, [disabled, token, selectedTools, onSelectionChange]);
+
+  const handleShowAgentInfo = useCallback((name: string) => {
+    setShowingInfoAgent(prev => (prev === name ? null : name));
+  }, []);
+
   // Separate builtin and MCP servers
   const { builtinServers, mcpServers } = useMemo(() => ({
     builtinServers: servers.filter(s => s.type === 'local'),
@@ -318,6 +511,13 @@ export function ToolSelector({
   const mcpTools = mcpServers.flatMap(s => s.tools);
   const builtinSelectedCount = builtinTools.filter(t => selectedTools.includes(t.name)).length;
   const mcpSelectedCount = mcpTools.filter(t => selectedTools.includes(t.name)).length;
+  const subagentSelectedCount = subagents.filter(s =>
+    selectedTools.includes(`subagent_${s.name}`)
+  ).length;
+  const hasSubagents = isSubagentLoading || subagentError !== null || subagents.length > 0;
+  const infoAgent = showingInfoAgent
+    ? subagents.find(agent => agent.name === showingInfoAgent)
+    : null;
 
   return (
     <div className="mb-2">
@@ -327,7 +527,10 @@ export function ToolSelector({
         <button
           onClick={() => {
             setIsToolsExpanded(!isToolsExpanded);
-            if (!isToolsExpanded) setIsMCPExpanded(false);
+            if (!isToolsExpanded) {
+              setIsMCPExpanded(false);
+              setIsAgentsExpanded(false);
+            }
           }}
           disabled={isLoading}
           className={`
@@ -358,7 +561,10 @@ export function ToolSelector({
           <button
             onClick={() => {
               setIsMCPExpanded(!isMCPExpanded);
-              if (!isMCPExpanded) setIsToolsExpanded(false);
+              if (!isMCPExpanded) {
+                setIsToolsExpanded(false);
+                setIsAgentsExpanded(false);
+              }
             }}
             disabled={isLoading}
             className={`
@@ -387,10 +593,45 @@ export function ToolSelector({
             )}
           </button>
         )}
+
+        {/* Agents Header */}
+        {hasSubagents && (
+          <button
+            onClick={() => {
+              setIsAgentsExpanded(!isAgentsExpanded);
+              if (!isAgentsExpanded) {
+                setIsToolsExpanded(false);
+                setIsMCPExpanded(false);
+              }
+            }}
+            disabled={isSubagentLoading}
+            className={`
+              flex items-center gap-2 px-3 py-2 rounded-lg text-sm
+              transition-colors duration-150 whitespace-nowrap
+              ${isSubagentLoading
+                ? 'text-gray-400 cursor-not-allowed'
+                : isAgentsExpanded
+                  ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-purple-50 dark:hover:bg-purple-900/20'
+              }
+            `}
+          >
+            <Bot className="w-4 h-4 text-purple-500" />
+            <span className="font-medium">Agents</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              ({subagentSelectedCount}/{subagents.length})
+            </span>
+            {isAgentsExpanded ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </button>
+        )}
       </div>
 
       {/* ========== Single Expanded Panel ========== */}
-      {(isToolsExpanded || isMCPExpanded) && (
+      {(isToolsExpanded || isMCPExpanded || isAgentsExpanded) && (
         <div className="bg-gray-50/50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-600 p-3 space-y-2">
           {/* Tools Expanded Panel */}
           {isToolsExpanded && (
@@ -439,6 +680,71 @@ export function ToolSelector({
                   onToggleExpand={() => handleToggleExpandServer(server.name)}
                 />
               ))}
+            </>
+          )}
+
+          {/* Agents Expanded Panel */}
+          {isAgentsExpanded && (
+            <>
+              {isSubagentLoading ? (
+                <div className="flex items-center justify-center gap-2 py-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Loading agents...
+                  </span>
+                </div>
+              ) : subagentError ? (
+                <div className="text-sm text-red-500 text-center py-2">
+                  {subagentError}
+                </div>
+              ) : subagents.length > 0 ? (
+                <>
+                  <div className="flex flex-wrap gap-1.5">
+                    {subagents.map(subagent => (
+                      <SubagentChip
+                        key={subagent.name}
+                        subagent={subagent}
+                        isSelected={selectedTools.includes(
+                          `subagent_${subagent.name}`
+                        )}
+                        onToggle={() => handleToggleSubagent(subagent)}
+                        onShowInfo={() => handleShowAgentInfo(subagent.name)}
+                        isShowingInfo={showingInfoAgent === subagent.name}
+                        disabled={disabled}
+                        isToggling={togglingAgents.has(subagent.name)}
+                      />
+                    ))}
+                  </div>
+
+                  {infoAgent && (
+                    <div className="mt-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {infoAgent.display_name}
+                        </span>
+                        {infoAgent.builtin && (
+                          <span className="text-xs px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-300 rounded">
+                            Built-in
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                        {infoAgent.description}
+                      </p>
+                      {infoAgent.tools.length > 0 && (
+                        <div className="text-xs text-gray-500 dark:text-gray-500">
+                          <span className="font-medium">Tools:</span>{' '}
+                          {infoAgent.tools.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">
+                  No agents available
+                </div>
+              )}
             </>
           )}
         </div>

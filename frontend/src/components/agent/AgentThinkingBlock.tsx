@@ -3,8 +3,9 @@
  * Displays the AI agent execution trace with expandable steps
  */
 
-import { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Loader2, CheckCircle2, Cpu, AlertCircle, Clock, Play, ArrowRight } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+import { ChevronDown, ChevronRight, ChevronUp, Loader2, CheckCircle2, Cpu, AlertCircle, Clock, Play, ArrowRight } from 'lucide-react';
+import { MarkdownRenderer } from '../chat/MarkdownRenderer';
 
 export interface TraceStep {
   error: string | null;
@@ -16,6 +17,8 @@ export interface TraceStep {
     name: string;
     arguments: Record<string, unknown>;
   }[];
+  source?: 'agent' | 'subagent';
+  subagent_name?: string;
 }
 
 export interface AgentThinkingBlockProps {
@@ -23,10 +26,20 @@ export interface AgentThinkingBlockProps {
   isThinking: boolean;
   thinkingDuration?: number; // Duration in milliseconds
   hasError?: boolean; // Whether an error occurred during thinking
+  title?: string;
+  subtitle?: string;
 }
 
-export function AgentThinkingBlock({ trace, isThinking, thinkingDuration, hasError = false }: AgentThinkingBlockProps) {
+export function AgentThinkingBlock({
+  trace,
+  isThinking,
+  thinkingDuration,
+  hasError = false,
+  title = 'Thinking Process',
+  subtitle,
+}: AgentThinkingBlockProps) {
   const [isOpen, setIsOpen] = useState(true);
+  const traceId = useId();
   const hasSteps = trace.length > 0;
 
   // Filter out empty finish steps for display
@@ -71,7 +84,7 @@ export function AgentThinkingBlock({ trace, isThinking, thinkingDuration, hasErr
           onClick={() => setIsOpen(!isOpen)}
           className="w-full flex items-center justify-between p-2 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           aria-expanded={isOpen}
-          aria-controls="agent-trace-steps"
+          aria-controls={traceId}
         >
           <div className="flex items-center gap-2">
             {isThinking ? (
@@ -79,7 +92,12 @@ export function AgentThinkingBlock({ trace, isThinking, thinkingDuration, hasErr
             ) : (
               <Cpu className="w-4 h-4 text-green-500" />
             )}
-            <span className="font-medium">Thinking Process</span>
+          <span className="font-medium">{title}</span>
+          {subtitle && (
+            <span className="text-xs text-gray-400 dark:text-gray-500">
+              {subtitle}
+            </span>
+          )}
           {!isThinking && iterations > 0 && (
             <span className="text-xs text-gray-400 dark:text-gray-500">
               ({iterations} iteration{iterations > 1 ? 's' : ''})
@@ -101,7 +119,7 @@ export function AgentThinkingBlock({ trace, isThinking, thinkingDuration, hasErr
       
         {isOpen && (
           <div
-            id="agent-trace-steps"
+            id={traceId}
             className="p-3 text-sm space-y-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
           >
             {hasDisplayableSteps ? (
@@ -112,9 +130,19 @@ export function AgentThinkingBlock({ trace, isThinking, thinkingDuration, hasErr
 
             {/* Show "Thinking completed" when thinking is done, regardless of whether tool calls were made */}
             {!isThinking && (
-              <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                <CheckCircle2 className="w-4 h-4" />
-                <span className="text-sm">Thinking completed</span>
+              <div className="flex items-center justify-between text-green-600 dark:text-green-400">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span className="text-sm">Thinking completed</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                  aria-label="Collapse thinking details"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
           </div>
@@ -131,6 +159,7 @@ function TraceStepItem({ step }: { step: TraceStep }) {
   const hasError = !!step.error;
   const hasContent = step.content !== null && step.content !== undefined;
   const isToolResult = step.action === 'tool_result';
+  const isSubagentOutput = step.action === 'subagent_output';
 
   // Determine icon and styling based on action type
   const getActionStyle = () => {
@@ -158,6 +187,14 @@ function TraceStepItem({ step }: { step: TraceStep }) {
         label: 'Result',
       };
     }
+    if (step.action === 'subagent_output') {
+      return {
+        icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" />,
+        bgColor: 'bg-emerald-50 dark:bg-emerald-900/30',
+        borderColor: 'border-emerald-200 dark:border-emerald-800',
+        label: 'Output',
+      };
+    }
     if (step.action === 'final_answer') {
       return {
         icon: <CheckCircle2 className="w-4 h-4 text-green-500" />,
@@ -166,12 +203,12 @@ function TraceStepItem({ step }: { step: TraceStep }) {
         label: 'Complete',
       };
     }
-      return {
-        icon: <Cpu className="w-4 h-4 text-orange-500" />,
-        bgColor: 'bg-orange-50 dark:bg-orange-900/30',
-        borderColor: 'border-orange-200 dark:border-orange-800',
-        label: step.action.replace(/_/g, ' '),
-      };
+    return {
+      icon: <Cpu className="w-4 h-4 text-orange-500" />,
+      bgColor: 'bg-orange-50 dark:bg-orange-900/30',
+      borderColor: 'border-orange-200 dark:border-orange-800',
+      label: step.action.replace(/_/g, ' '),
+    };
   };
 
   const style = getActionStyle();
@@ -229,8 +266,15 @@ function TraceStepItem({ step }: { step: TraceStep }) {
 
       {/* Other content - Don't show for final_answer/finish as it will be displayed as main message */}
       {hasContent && !isToolResult && step.action !== 'final_answer' && step.action !== 'finish' && (
-        <div className="mt-2 text-gray-600 dark:text-gray-400 text-sm whitespace-pre-wrap">
-          {formatContent(step.content)}
+        <div className="mt-2 text-gray-600 dark:text-gray-400 text-sm white-space: normal">
+          {isSubagentOutput ? (
+            <MarkdownRenderer
+              content={formatContent(step.content)}
+              className="text-xs"
+            />
+          ) : (
+            formatContent(step.content)
+          )}
         </div>
       )}
 

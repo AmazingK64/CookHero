@@ -36,10 +36,8 @@ import {
   getLLMStatsDistributionByModule,
   getLLMStatsDistributionByModel,
   getLLMStatsDistributionByTool,
-  getLLMStatsToolTimeSeries,
   getLLMStatsModules,
   getLLMStatsModels,
-  getLLMStatsTools,
 } from '../services/api/llmStats';
 import type {
   LLMStatsSummary,
@@ -50,7 +48,6 @@ import type {
   ModelDistribution,
   ToolDistribution,
   ToolDistributionResponse,
-  ToolTimeSeriesDataPoint,
 } from '../types/llmStats';
 
 // Chart colors
@@ -381,11 +378,9 @@ export default function LLMStatsPage() {
   const [moduleDist, setModuleDist] = useState<ModuleDistributionResponse | null>(null);
   const [modelDist, setModelDist] = useState<ModelDistributionResponse | null>(null);
   const [toolDist, setToolDist] = useState<ToolDistributionResponse | null>(null);
-  const [toolTimeSeries, setToolTimeSeries] = useState<TimeSeriesResponse | null>(null);
 
   const [availableModules, setAvailableModules] = useState<string[]>([]);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [availableTools, setAvailableTools] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [tsLoading, setTsLoading] = useState(false);
@@ -416,14 +411,13 @@ export default function LLMStatsPage() {
     setError(null);
 
     try {
-      const [summaryData, tsData, modDistData, modelDistData, modulesData, modelsData, toolsData] = await Promise.all([
+      const [summaryData, tsData, modDistData, modelDistData, modulesData, modelsData] = await Promise.all([
         getLLMStatsSummary(token),
         getLLMStatsTimeSeries(token, days, granularity),
         getLLMStatsDistributionByModule(token, customStart || undefined, customEnd || undefined),
         getLLMStatsDistributionByModel(token, customStart || undefined, customEnd || undefined),
         getLLMStatsModules(token),
         getLLMStatsModels(token),
-        getLLMStatsTools(token),
       ]);
 
       setSummary(summaryData);
@@ -432,7 +426,6 @@ export default function LLMStatsPage() {
       setModelDist(modelDistData);
       setAvailableModules(modulesData.modules);
       setAvailableModels(modelsData.models);
-      setAvailableTools(toolsData.tools);
     } catch (err) {
       console.error('Failed to load LLM stats:', err);
       setError(err instanceof Error ? err.message : '加载数据失败');
@@ -477,7 +470,7 @@ export default function LLMStatsPage() {
 
     setToolLoading(true);
     try {
-      const [toolDistData, toolTsData] = await Promise.all([
+      const [toolDistData] = await Promise.all([
         getLLMStatsDistributionByTool(
           token,
           customStart || undefined,
@@ -485,16 +478,8 @@ export default function LLMStatsPage() {
           selectedModelForTool || undefined,
           selectedModuleForTool || undefined
         ),
-        getLLMStatsToolTimeSeries(
-          token,
-          days,
-          granularity,
-          selectedModelForTool || undefined,
-          selectedModuleForTool || undefined
-        ),
       ]);
       setToolDist(toolDistData);
-      setToolTimeSeries(toolTsData);
     } catch (err) {
       console.error('Failed to load tool stats:', err);
     } finally {
@@ -578,7 +563,8 @@ export default function LLMStatsPage() {
         </div>
 
         {/* Top Stats Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+        {/* <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6"> */}
+        <div className="grid grid-cols-2 lg:grid-cols-[3fr_2fr_2fr_2fr] gap-3 md:gap-4 mb-6">
           <StatCard
             title="总 Token 消耗"
             value={(summary?.total_tokens ?? 0).toLocaleString()}

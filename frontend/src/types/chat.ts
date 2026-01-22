@@ -162,3 +162,46 @@ export interface StreamingState {
   isStreaming: boolean;
   tempId?: string;
 }
+
+// ==================== Subagent Types ====================
+
+/**
+ * Subagent configuration schema from API.
+ */
+export interface SubagentSchema {
+  name: string;
+  display_name: string;
+  description: string;
+  tools: string[];
+  max_iterations: number;
+  enabled: boolean;
+  builtin: boolean;
+  category: string;
+}
+
+/**
+ * Response from list subagents API.
+ */
+export interface SubagentListResponse {
+  subagents: SubagentSchema[];
+}
+
+/**
+ * Request to toggle a subagent's enabled status.
+ */
+export interface SubagentToggleRequest {
+  enabled: boolean;
+}
+
+/**
+ * Request to create a custom subagent.
+ */
+export interface CreateSubagentRequest {
+  name: string;
+  display_name: string;
+  description: string;
+  system_prompt: string;
+  tools?: string[];
+  max_iterations?: number;
+  category?: string;
+}

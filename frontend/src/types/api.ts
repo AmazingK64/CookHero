@@ -39,6 +39,10 @@ export interface SSEEvent {
   name?: string;
   arguments?: Record<string, unknown>;
   iteration?: number;
+  action?: string;
+  tool_calls?: Array<{ name: string; arguments: Record<string, unknown> }>;
+  source?: 'agent' | 'subagent';
+  subagent_name?: string;
   // Tool result fields
   success?: boolean;
   result?: unknown;

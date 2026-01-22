@@ -9,7 +9,11 @@ import type {
   AgentSessionResponse,
   ToolsListResponse,
   MCPServerListResponse,
-  MCPServer
+  MCPServer,
+  SubagentListResponse,
+  SubagentSchema,
+  SubagentToggleRequest,
+  CreateSubagentRequest,
 } from '../../types';
 
 /**
@@ -275,4 +279,87 @@ export async function updateAgentSessionTitle(
     }
 
     return response.json();
+}
+
+// ==================== Subagent API ====================
+
+/**
+ * List all subagents for the current user
+ */
+export async function listSubagents(token?: string): Promise<SubagentListResponse> {
+  const response = await fetch(`${API_BASE}/agent/subagents`, {
+    headers: createAuthHeaders(token),
+  });
+
+  if (!response.ok) {
+    const msg = await parseErrorResponse(response);
+    throw new Error(msg || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Toggle a subagent's enabled status
+ */
+export async function toggleSubagent(
+  name: string,
+  enabled: boolean,
+  token?: string
+): Promise<{ message: string }> {
+  const payload: SubagentToggleRequest = { enabled };
+  
+  const response = await fetch(`${API_BASE}/agent/subagents/${name}`, {
+    method: 'PATCH',
+    headers: createJsonHeaders(token),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const msg = await parseErrorResponse(response);
+    throw new Error(msg || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Create a custom subagent
+ */
+export async function createSubagent(
+  request: CreateSubagentRequest,
+  token?: string
+): Promise<SubagentSchema> {
+  const response = await fetch(`${API_BASE}/agent/subagents`, {
+    method: 'POST',
+    headers: createJsonHeaders(token),
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const msg = await parseErrorResponse(response);
+    throw new Error(msg || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Delete a custom subagent
+ */
+export async function deleteSubagent(
+  name: string,
+  token?: string
+): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE}/agent/subagents/${name}`, {
+    method: 'DELETE',
+    headers: createAuthHeaders(token),
+  });
+
+  if (!response.ok) {
+    const msg = await parseErrorResponse(response);
+    throw new Error(msg || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
 }
